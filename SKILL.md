@@ -876,6 +876,67 @@ What `npm run test:e2e` does:
 Lightning (CLN) network flag reminder:
 - mainnet uses `--ln-network bitcoin` (alias supported by our scripts: `mainnet`)
 
+### Live Ops Checklist (Devnet/Testnet -> Mainnet)
+Goal: a fully scripted path so the only manual input is "fund these addresses" (SOL + USDT + LN liquidity).
+
+Solana (local keypairs only):
+```bash
+# Generate local keypairs (store them under onchain/, never commit).
+scripts/solctl.sh keygen --out onchain/solana/keypairs/swap-fee-collector.json
+scripts/solctl.sh keygen --out onchain/solana/keypairs/swap-maker-sol.json
+scripts/solctl.sh keygen --out onchain/solana/keypairs/swap-taker-sol.json
+
+# Print pubkeys (fund these with SOL on the target cluster).
+scripts/solctl.sh address --keypair onchain/solana/keypairs/swap-fee-collector.json
+scripts/solctl.sh address --keypair onchain/solana/keypairs/swap-maker-sol.json
+scripts/solctl.sh address --keypair onchain/solana/keypairs/swap-taker-sol.json
+
+# For devnet/testnet only: airdrop SOL for quick testing.
+scripts/solctl.sh airdrop --rpc-url https://api.devnet.solana.com --keypair onchain/solana/keypairs/swap-maker-sol.json --sol 2
+scripts/solctl.sh airdrop --rpc-url https://api.devnet.solana.com --keypair onchain/solana/keypairs/swap-taker-sol.json --sol 2
+scripts/solctl.sh airdrop --rpc-url https://api.devnet.solana.com --keypair onchain/solana/keypairs/swap-fee-collector.json --sol 2
+
+# Ensure USDT ATAs exist and print them (send USDT to the maker ATA for inventory).
+scripts/solctl.sh token-ata --rpc-url <rpc> --keypair onchain/solana/keypairs/swap-maker-sol.json --mint <USDT_MINT> --create 1
+scripts/solctl.sh token-ata --rpc-url <rpc> --keypair onchain/solana/keypairs/swap-taker-sol.json --mint <USDT_MINT> --create 1
+```
+
+Solana escrow program (one shared deployment per cluster):
+```bash
+# Initialize fee config once per cluster (example: 1% = 100 bps).
+scripts/escrowctl.sh config-init --solana-rpc-url <rpc> --solana-keypair onchain/solana/keypairs/swap-fee-collector.json --fee-bps 100
+
+# Confirm config:
+scripts/escrowctl.sh config-get --solana-rpc-url <rpc>
+```
+
+Lightning (local node only; no wallet-service APIs):
+```bash
+# Example: query a running CLN node (CLI backend).
+scripts/lnctl.sh info --backend cli --network bitcoin
+
+# Funding address for your CLN node's on-chain wallet (used to get liquidity into LN):
+scripts/lnctl.sh newaddr --backend cli --network bitcoin
+```
+
+Intercom + bots (symmetrical, both sides can quote/RFQ/invite):
+```bash
+# Start peers (generates SC-Bridge tokens under onchain/sc-bridge/*.token)
+scripts/run-swap-maker.sh swap-maker 49222 0000intercomswapbtcusdt
+scripts/run-swap-taker.sh swap-taker 49223 0000intercomswapbtcusdt
+
+# Start OTC bots (pass the live RPC + keypairs + mint; both default to otc-channel 0000intercomswapbtcusdt)
+scripts/otc-maker-peer.sh swap-maker 49222 \
+  --run-swap 1 \
+  --ln-backend cli --ln-network bitcoin \
+  --solana-rpc-url <rpc> --solana-keypair onchain/solana/keypairs/swap-maker-sol.json --solana-mint <USDT_MINT>
+
+scripts/otc-taker-peer.sh swap-taker 49223 \
+  --run-swap 1 \
+  --ln-backend cli --ln-network bitcoin \
+  --solana-rpc-url <rpc> --solana-keypair onchain/solana/keypairs/swap-taker-sol.json --solana-mint <USDT_MINT>
+```
+
 ### Public RPC / API Endpoints (Fallback-Only)
 These are useful for development and light usage. They are rate-limited and may change or block you.
 
