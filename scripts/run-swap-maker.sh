@@ -20,6 +20,7 @@ cd "$ROOT"
 STORE_NAME="${1:-swap-maker}"
 SC_PORT="${2:-49222}"
 OTC_CHANNEL="${3:-0000intercomswapbtcusdt}"
+shift 3 || true
 
 SIDECHANNEL_POW="${SIDECHANNEL_POW:-1}"
 SIDECHANNEL_POW_DIFFICULTY="${SIDECHANNEL_POW_DIFFICULTY:-12}"
@@ -49,4 +50,5 @@ exec pear run . \
   --sidechannel-pow-difficulty "$SIDECHANNEL_POW_DIFFICULTY" \
   --sidechannel-welcome-required 0 \
   --sidechannel-invite-required 1 \
-  --sidechannel-invite-prefixes "swap:"
+  --sidechannel-invite-prefixes "swap:" \
+  "$@"

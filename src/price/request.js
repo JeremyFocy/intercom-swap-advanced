@@ -1,6 +1,15 @@
 export async function fetchJson(url, { timeoutMs = 4000, headers = {} } = {}) {
-  const baseFetch = globalThis.fetch;
-  if (typeof baseFetch !== 'function') throw new Error('fetch is not available');
+  let baseFetch = globalThis.fetch;
+  if (typeof baseFetch !== 'function') {
+    // Pear/Bare runtime does not always provide a global fetch implementation.
+    // Prefer bare-fetch when available (works in Bare).
+    try {
+      const mod = await import('bare-fetch');
+      baseFetch = mod?.default || mod;
+    } catch (_e) {
+      throw new Error('fetch is not available');
+    }
+  }
 
   const ms = Math.max(1, Number.isFinite(timeoutMs) ? Math.trunc(timeoutMs) : 4000);
   const Controller = globalThis.AbortController;
