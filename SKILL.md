@@ -221,6 +221,8 @@ Use Pear runtime only (never native node).
 ### Prerequisites (Node + Pear)
 Intercom requires **Node.js >= 22** and the **Pear runtime**.
 
+Supported: **Node 22.x and 23.x**. Avoid **Node 24.x** for now.
+
 Recommended: standardize on **Node 22.x** for consistency (Pear runtime + native deps tend to be most stable there). If you run Node 23.x and hit Pear install/runtime issues, switch to Node 22.x before debugging further.
 
 Note: the swap receipts store uses Node's built-in `node:sqlite` module. Ensure your Node version supports it:
@@ -235,7 +237,7 @@ brew install node@22
 node -v
 npm -v
 ```
-If `node -v` is not **22.x**, use nvm:
+If `node -v` is not **22.x** or **23.x** (or is **24.x**), use nvm:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
 source ~/.nvm/nvm.sh
@@ -275,7 +277,7 @@ nvm install 22
 nvm use 22
 node -v
 ```
-If you use the Node installer instead, verify `node -v` shows **22.x**.
+If you use the Node installer instead, verify `node -v` shows **22.x** or **23.x** (avoid **24.x**).
 Alternative (Volta):
 ```powershell
 winget install Volta.Volta
@@ -330,7 +332,7 @@ Questions to ask first:
 
 Commands (run in the folder that contains this SKILL.md and its `package.json`):
 ```bash
-# ensure Node 22
+# ensure Node 22.x or 23.x (avoid Node 24.x)
 node -v
 
 # update deps
@@ -341,7 +343,7 @@ pear -v
 ```
 
 Notes:
-- Pear uses the currently active Node; ensure **Node 22** before running `pear -v`.
+- Pear uses the currently active Node; ensure **Node 22.x or 23.x** (avoid **24.x**) before running `pear -v`.
 - Stop peers before updating, restart afterward.
 - Keep repo pins unchanged.
 
@@ -407,10 +409,12 @@ Core:
 - `--subnet-channel <name>` : subnet/app identity. Keep it consistent across peers you want to communicate with (mismatches can prevent connections).
 - `--subnet-bootstrap <hex>` : admin **Peer Writer** key for joiners.
 - `--msb 0|1` (or `--enable-msb 0|1`) : enable/disable MSB networking (**default: 1**). Use `0` for sidechannel-only mode and unattended e2e tests.
-- `--dht-bootstrap "<node1,node2>"` : override HyperDHT bootstrap nodes used by Hyperswarm (comma-separated).
-  - Node format: `<host>:<port>` or `[suggested-ip@]<host>:<port>`.
-  - Leave unset to use defaults.
+- `--dht-bootstrap "<node1,node2>"` (alias: `--peer-dht-bootstrap`) : override HyperDHT bootstrap nodes used by the **peer Hyperswarm** instance (comma-separated).
+  - Node format: `<host>:<port>` (example: `127.0.0.1:49737`). (hyperdht also supports `[suggested-ip@]<host>:<port>`; only the port is validated.)
+  - Use for local/faster discovery tests. All peers you expect to discover each other should use the same list.
   - This is **not** `--subnet-bootstrap` (writer key hex). DHT bootstrap is networking; subnet bootstrap is app/subnet identity.
+- `--msb-dht-bootstrap "<node1,node2>"` : override HyperDHT bootstrap nodes used by the **MSB network** (comma-separated).
+  - Warning: MSB needs to connect to the validator network to confirm TXs. Pointing MSB at a local DHT will usually break confirmations unless you also run a compatible MSB network locally.
 
 Sidechannels:
 - `--sidechannels a,b,c` (or `--sidechannel a,b,c`) : extra sidechannels to join at startup.
