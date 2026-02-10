@@ -102,6 +102,10 @@ function App() {
   const [lnChannelAmountSats, setLnChannelAmountSats] = useState<number>(1_000_000);
   const [lnChannelPrivate, setLnChannelPrivate] = useState<boolean>(true);
 
+  // Stack observer: lightweight operator signal when a previously-ready stack degrades.
+  const stackOkRef = useRef<boolean | null>(null);
+  const [stackLastOkTs, setStackLastOkTs] = useState<number | null>(null);
+
   // Sell USDT: offer announcer (non-binding discovery message).
   const [offerName, setOfferName] = useState<string>('');
   const [offerBtcSats, setOfferBtcSats] = useState<number>(10_000);
@@ -1021,6 +1025,11 @@ function App() {
     }
   }
 
+  const preflightBusyRef = useRef(false);
+  useEffect(() => {
+    preflightBusyRef.current = preflightBusy;
+  }, [preflightBusy]);
+
   function summarizeLn(listfunds: any) {
     try {
       if (!listfunds || typeof listfunds !== 'object') return { ok: false, channels: 0 };
@@ -1708,6 +1717,38 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Stack observer:
+  // - Periodically refresh the checklist while the stack is up (so the UI detects crashes/disconnects).
+  // - Emit a toast if the stack transitions from READY -> not ready.
+  useEffect(() => {
+    const okPromptd = Boolean(health?.ok);
+    const running = Boolean(stackAnyRunning || stackGate.ok);
+    if (!okPromptd || !running) return;
+    const intervalMs = 15_000;
+    const t = setInterval(() => {
+      if (preflightBusyRef.current) return;
+      void refreshPreflight();
+    }, intervalMs);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [health?.ok, stackAnyRunning, stackGate.ok]);
+
+  useEffect(() => {
+    const ok = Boolean(stackGate.ok);
+    const prev = stackOkRef.current;
+    if (prev === null) {
+      stackOkRef.current = ok;
+      if (ok) setStackLastOkTs(Date.now());
+      return;
+    }
+    if (ok) setStackLastOkTs(Date.now());
+    if (prev && !ok) {
+      const reasons = stackGate.reasons.length > 0 ? stackGate.reasons.map((r) => `- ${r}`).join('\n') : '- unknown';
+      pushToast('error', `Stack issue detected (something crashed/disconnected)\n\n${reasons}`, { ttlMs: 12_000 });
+    }
+    stackOkRef.current = ok;
+  }, [stackGate.ok, stackGate.reasons]);
+
   // Close detail modal via Escape.
   useEffect(() => {
     const isModal = selected && selected.type !== 'console_event' && selected.type !== 'prompt_event';
@@ -1867,9 +1908,11 @@ function App() {
         {activeTab === 'overview' ? (
           <div className="grid2">
             <Panel title="Getting Started">
-              <div className="alert warn">
-                Use <b>START</b> in the header. It bootstraps the full local stack: peer + sidechannels + Lightning + Solana + receipts.
-              </div>
+              {!stackGate.ok ? (
+                <div className="alert warn">
+                  Use <b>START</b> in the header. It bootstraps the full local stack: peer + sidechannels + Lightning + Solana + receipts.
+                </div>
+              ) : null}
 
               <div className="row">
                 <button className="btn primary" onClick={refreshPreflight} disabled={preflightBusy}>
@@ -1879,6 +1922,12 @@ function App() {
                   Wallets
                 </button>
               </div>
+
+              {stackAnyRunning ? (
+                <div className="muted small" style={{ marginTop: 6 }}>
+                  Observer: status auto-refreshes while running. {stackLastOkTs ? `Last READY: ${msToUtcIso(stackLastOkTs)}` : ''}
+                </div>
+              ) : null}
 
 	              {!stackGate.ok ? (
 	                <div className="alert bad">
