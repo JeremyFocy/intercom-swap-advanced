@@ -141,6 +141,7 @@ This repo also provides long-running RFQ “agent bots” that sit in an RFQ cha
   - e2e: CLN via Docker Compose (`dev/ln-regtest/docker-compose.yml`)
   - e2e (adapter coverage): LND via Docker Compose (`dev/lnd-regtest/docker-compose.yml`)
   - production: recommend **LND Neutrino** (`--bitcoin.node=neutrino`) to avoid running a full `bitcoind` on mainnet
+  - **Permission note:** if your agent/runtime cannot execute `docker` commands (or cannot access the Docker daemon), stop and ask the human operator to start Docker and run the needed commands on your behalf (then paste the output back) before proceeding.
 - LN liquidity prerequisites:
   - Swaps will fail if the payer has no outbound liquidity, or the invoice receiver has no inbound liquidity.
   - Channels are not opened per trade. Open channels ahead of time (or rely on routing if you have a well-connected node).
@@ -1143,6 +1144,7 @@ Prereqs:
   - Sanity check: `docker info` and `docker compose version`
   - macOS: any Docker daemon is fine (Docker Desktop, Colima, etc).
   - Linux: the `docker` service must be running.
+  - If your agent cannot run `docker` (permission denied / daemon unavailable), ask the human operator to run the Docker commands and resolve daemon issues before continuing.
   - You generally do **not** need to run docker commands manually:
     - Collin: Overview step `4) Lightning readiness` -> `Start LN (docker)` / `ln_docker_ps`
     - Collin (regtest): `Bootstrap regtest channel` (mines + funds + opens a channel)
