@@ -263,14 +263,56 @@ function App() {
   const [openClaims, setOpenClaims] = useState<any[]>([]);
   const [openClaimsOffset, setOpenClaimsOffset] = useState(0);
   const [openClaimsHasMore, setOpenClaimsHasMore] = useState(true);
-	  const [openClaimsLoading, setOpenClaimsLoading] = useState(false);
-	  const openClaimsLimit = 50;
-	  const openClaimsListRef = useRef<HTMLDivElement | null>(null);
+		  const [openClaimsLoading, setOpenClaimsLoading] = useState(false);
+		  const openClaimsLimit = 50;
+		  const openClaimsListRef = useRef<HTMLDivElement | null>(null);
 
-	  const scAbortRef = useRef<AbortController | null>(null);
-	  const scStreamGenRef = useRef(0);
-	  const scStreamWantedRef = useRef(true);
-	  const promptAbortRef = useRef<AbortController | null>(null);
+  // Receipts source picker: lets operators inspect receipts written by other helpers/bots too.
+  type ReceiptsSource = { key: string; label: string; db: string; exists?: boolean };
+  const [receiptsSourceKey, setReceiptsSourceKey] = useState<string>('default');
+  const receiptsSources: ReceiptsSource[] = useMemo(() => {
+    const out: ReceiptsSource[] = [];
+    const srcRaw: any[] = Array.isArray((envInfo as any)?.receipts?.sources) ? ((envInfo as any).receipts.sources as any[]) : [];
+    for (const s of srcRaw) {
+      if (!s || typeof s !== 'object') continue;
+      const key = String((s as any).key || '').trim();
+      const label = String((s as any).label || '').trim() || key;
+      const db = String((s as any).db || '').trim();
+      const exists = (s as any).exists === undefined ? undefined : Boolean((s as any).exists);
+      if (!key || !db) continue;
+      out.push({ key, label, db, exists });
+    }
+    const envDb = String((envInfo as any)?.receipts?.db || '').trim();
+    if (!out.find((s) => s.key === 'default') && envDb) {
+      out.push({ key: 'default', label: 'default (setup.json)', db: envDb, exists: true });
+    }
+    out.sort((a, b) => {
+      if (a.key === 'default' && b.key !== 'default') return -1;
+      if (b.key === 'default' && a.key !== 'default') return 1;
+      return a.label.localeCompare(b.label);
+    });
+    return out;
+  }, [envInfo]);
+  const selectedReceiptsSource: ReceiptsSource | null = useMemo(() => {
+    if (receiptsSources.length < 1) return null;
+    return receiptsSources.find((s) => s.key === receiptsSourceKey) || receiptsSources.find((s) => s.key === 'default') || receiptsSources[0] || null;
+  }, [receiptsSources, receiptsSourceKey]);
+  useEffect(() => {
+    if (receiptsSources.length < 1) return;
+    if (!receiptsSources.some((s) => s.key === receiptsSourceKey)) {
+      setReceiptsSourceKey(receiptsSources.find((s) => s.key === 'default')?.key || receiptsSources[0].key);
+    }
+  }, [receiptsSources, receiptsSourceKey]);
+  const receiptsDbArg = useMemo(() => {
+    if (!selectedReceiptsSource) return {};
+    if (selectedReceiptsSource.key === 'default') return {};
+    return { db: selectedReceiptsSource.db };
+  }, [selectedReceiptsSource]);
+
+		  const scAbortRef = useRef<AbortController | null>(null);
+		  const scStreamGenRef = useRef(0);
+		  const scStreamWantedRef = useRef(true);
+		  const promptAbortRef = useRef<AbortController | null>(null);
 
   const scListRef = useRef<HTMLDivElement | null>(null);
   const promptListRef = useRef<HTMLDivElement | null>(null);
@@ -963,15 +1005,16 @@ function App() {
 	        const ok = window.confirm(`Claim escrow now?\n\ntrade_id: ${trade_id}`);
 	        if (!ok) return;
 	      }
-	      await runToolFinal(
-	        'intercomswap_swaprecover_claim',
-	        {
-	          trade_id,
-	          ...(solCuLimit > 0 ? { cu_limit: solCuLimit } : {}),
-	          ...(solCuPrice > 0 ? { cu_price: solCuPrice } : {}),
-	        },
-	        { auto_approve: true }
-	      );
+		      await runToolFinal(
+		        'intercomswap_swaprecover_claim',
+		        {
+		          ...receiptsDbArg,
+		          trade_id,
+		          ...(solCuLimit > 0 ? { cu_limit: solCuLimit } : {}),
+		          ...(solCuPrice > 0 ? { cu_price: solCuPrice } : {}),
+		        },
+		        { auto_approve: true }
+		      );
 	      pushToast('success', `Claim submitted (${trade_id})`);
 	      void loadTradesPage({ reset: true });
 	      void loadOpenClaimsPage({ reset: true });
@@ -1013,15 +1056,16 @@ function App() {
 	        const ok = window.confirm(`Refund escrow now?\n\ntrade_id: ${trade_id}`);
 	        if (!ok) return;
 	      }
-	      await runToolFinal(
-	        'intercomswap_swaprecover_refund',
-	        {
-	          trade_id,
-	          ...(solCuLimit > 0 ? { cu_limit: solCuLimit } : {}),
-	          ...(solCuPrice > 0 ? { cu_price: solCuPrice } : {}),
-	        },
-	        { auto_approve: true }
-	      );
+		      await runToolFinal(
+		        'intercomswap_swaprecover_refund',
+		        {
+		          ...receiptsDbArg,
+		          trade_id,
+		          ...(solCuLimit > 0 ? { cu_limit: solCuLimit } : {}),
+		          ...(solCuPrice > 0 ? { cu_price: solCuPrice } : {}),
+		        },
+		        { auto_approve: true }
+		      );
 	      pushToast('success', `Refund submitted (${trade_id})`);
 	      void loadTradesPage({ reset: true });
 	      void loadOpenRefundsPage({ reset: true });
@@ -1788,7 +1832,7 @@ function App() {
     setTradesLoading(true);
     try {
       const offset = reset ? 0 : tradesOffset;
-      const page = await runDirectToolOnce('intercomswap_receipts_list', { limit: tradesLimit, offset }, { auto_approve: false });
+      const page = await runDirectToolOnce('intercomswap_receipts_list', { ...receiptsDbArg, limit: tradesLimit, offset }, { auto_approve: false });
       const arr = Array.isArray(page) ? page : [];
       setTrades((prev) => {
         const next = reset ? [] : prev;
@@ -1820,7 +1864,7 @@ function App() {
       const offset = reset ? 0 : openRefundsOffset;
       const page = await runDirectToolOnce(
         'intercomswap_receipts_list_open_refunds',
-        { limit: openRefundsLimit, offset },
+        { ...receiptsDbArg, limit: openRefundsLimit, offset },
         { auto_approve: false }
       );
       const arr = Array.isArray(page) ? page : [];
@@ -1857,7 +1901,7 @@ function App() {
       const offset = reset ? 0 : openClaimsOffset;
       const page = await runDirectToolOnce(
         'intercomswap_receipts_list_open_claims',
-        { limit: openClaimsLimit, offset },
+        { ...receiptsDbArg, limit: openClaimsLimit, offset },
         { auto_approve: false }
       );
       const arr = Array.isArray(page) ? page : [];
@@ -2412,6 +2456,26 @@ function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
+
+  // When switching receipts DB sources, reset pagination so operators don't mix multiple stores.
+  useEffect(() => {
+    if (!selectedReceiptsSource) return;
+    setTrades([]);
+    setTradesOffset(0);
+    setTradesHasMore(true);
+    setOpenRefunds([]);
+    setOpenRefundsOffset(0);
+    setOpenRefundsHasMore(true);
+    setOpenClaims([]);
+    setOpenClaimsOffset(0);
+    setOpenClaimsHasMore(true);
+    if (activeTab === 'trade_actions') void loadTradesPage({ reset: true });
+    if (activeTab === 'refunds') {
+      void loadOpenRefundsPage({ reset: true });
+      void loadOpenClaimsPage({ reset: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedReceiptsSource?.key]);
 
   // Load recent history from local IndexedDB (memory-safe; DOM is virtualized).
   useEffect(() => {
@@ -3811,16 +3875,36 @@ function App() {
           </div>
         ) : null}
 
-        {activeTab === 'trade_actions' ? (
-          <div className="grid2">
-            <Panel title="Trade Receipts (local, paginated)">
-              <p className="muted">
-                This view is powered by the local receipts DB configured in <span className="mono">onchain/prompt/setup.json</span>.
-              </p>
-              <div className="row">
-                <button
-                  className="btn primary"
-                  onClick={() => {
+	      {activeTab === 'trade_actions' ? (
+	          <div className="grid2">
+	            <Panel title="Trade Receipts (local, paginated)">
+	              <p className="muted">
+	                Viewing receipts from:{' '}
+	                <span className="mono">{selectedReceiptsSource?.label || 'default (setup.json)'}</span>
+	              </p>
+	              <div className="row">
+	                <span className="muted small">receipts</span>
+	                <select
+	                  className="select"
+	                  value={selectedReceiptsSource?.key || 'default'}
+	                  onChange={(e) => setReceiptsSourceKey(String(e.target.value || 'default'))}
+	                  disabled={receiptsSources.length < 2}
+	                >
+	                  {receiptsSources.length > 0 ? (
+	                    receiptsSources.map((s) => (
+	                      <option key={s.key} value={s.key}>
+	                        {s.label}
+	                      </option>
+	                    ))
+	                  ) : (
+	                    <option value="default">default (setup.json)</option>
+	                  )}
+	                </select>
+	              </div>
+	              <div className="row">
+	                <button
+	                  className="btn primary"
+	                  onClick={() => {
                     setTrades([]);
                     setTradesOffset(0);
                     setTradesHasMore(true);
@@ -3932,13 +4016,32 @@ function App() {
           </div>
         ) : null}
 
-        {activeTab === 'refunds' ? (
-          <div className="grid2">
-            <Panel title="Open Refunds (receipts)">
-              <div className="row">
-                <button
-                  className="btn primary"
-                  onClick={() => {
+	        {activeTab === 'refunds' ? (
+	          <div className="grid2">
+	            <Panel title="Open Refunds (receipts)">
+	              <div className="row">
+	                <span className="muted small">receipts</span>
+	                <select
+	                  className="select"
+	                  value={selectedReceiptsSource?.key || 'default'}
+	                  onChange={(e) => setReceiptsSourceKey(String(e.target.value || 'default'))}
+	                  disabled={receiptsSources.length < 2}
+	                >
+	                  {receiptsSources.length > 0 ? (
+	                    receiptsSources.map((s) => (
+	                      <option key={s.key} value={s.key}>
+	                        {s.label}
+	                      </option>
+	                    ))
+	                  ) : (
+	                    <option value="default">default (setup.json)</option>
+	                  )}
+	                </select>
+	              </div>
+	              <div className="row">
+	                <button
+	                  className="btn primary"
+	                  onClick={() => {
                     setOpenRefunds([]);
                     setOpenRefundsOffset(0);
                     setOpenRefundsHasMore(true);

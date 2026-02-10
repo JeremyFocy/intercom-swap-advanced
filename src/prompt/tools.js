@@ -1211,6 +1211,12 @@ export const INTERCOMSWAP_TOOLS = [
     type: 'object',
     additionalProperties: false,
     properties: {
+      db: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 400,
+        description: 'Optional receipts db override (must be under onchain/receipts and end with .sqlite).',
+      },
       limit: { type: 'integer', minimum: 1, maximum: 1000 },
       offset: { type: 'integer', minimum: 0, maximum: 1_000_000 },
     },
@@ -1219,13 +1225,27 @@ export const INTERCOMSWAP_TOOLS = [
   tool('intercomswap_receipts_show', 'Show a local receipt by trade_id.', {
     type: 'object',
     additionalProperties: false,
-    properties: { trade_id: { type: 'string', minLength: 1, maxLength: 128 } },
+    properties: {
+      db: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 400,
+        description: 'Optional receipts db override (must be under onchain/receipts and end with .sqlite).',
+      },
+      trade_id: { type: 'string', minLength: 1, maxLength: 128 },
+    },
     required: ['trade_id'],
   }),
   tool('intercomswap_receipts_list_open_claims', 'List trades that look claimable (state=ln_paid and preimage present).', {
     type: 'object',
     additionalProperties: false,
     properties: {
+      db: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 400,
+        description: 'Optional receipts db override (must be under onchain/receipts and end with .sqlite).',
+      },
       limit: { type: 'integer', minimum: 1, maximum: 1000 },
       offset: { type: 'integer', minimum: 0, maximum: 1_000_000 },
     },
@@ -1238,6 +1258,12 @@ export const INTERCOMSWAP_TOOLS = [
       type: 'object',
       additionalProperties: false,
       properties: {
+        db: {
+          type: 'string',
+          minLength: 1,
+          maxLength: 400,
+          description: 'Optional receipts db override (must be under onchain/receipts and end with .sqlite).',
+        },
         now_unix: { ...unixSecParam, description: 'Optional unix seconds; defaults to now.' },
         limit: { type: 'integer', minimum: 1, maximum: 1000 },
         offset: { type: 'integer', minimum: 0, maximum: 1_000_000 },
@@ -1249,6 +1275,12 @@ export const INTERCOMSWAP_TOOLS = [
     type: 'object',
     additionalProperties: false,
     properties: {
+      db: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 400,
+        description: 'Optional receipts db override (must be under onchain/receipts and end with .sqlite).',
+      },
       trade_id: { type: 'string', minLength: 1, maxLength: 128 },
       payment_hash_hex: hex32Param,
       cu_limit: solCuLimitParam,
@@ -1260,6 +1292,12 @@ export const INTERCOMSWAP_TOOLS = [
     type: 'object',
     additionalProperties: false,
     properties: {
+      db: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 400,
+        description: 'Optional receipts db override (must be under onchain/receipts and end with .sqlite).',
+      },
       trade_id: { type: 'string', minLength: 1, maxLength: 128 },
       payment_hash_hex: hex32Param,
       cu_limit: solCuLimitParam,

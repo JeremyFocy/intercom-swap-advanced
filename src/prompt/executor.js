@@ -460,6 +460,16 @@ export class ToolExecutor {
 	          store.close();
 	        }
 	      },
+	      listTrades: async ({ limit = 250 } = {}) => {
+	        const store = await this._openReceiptsStore({ required: false });
+	        if (!store) return [];
+	        const n = Number.isFinite(limit) ? Math.max(1, Math.min(1000, Math.trunc(limit))) : 250;
+	        try {
+	          return store.listTradesPaged({ limit: n, offset: 0 });
+	        } finally {
+	          store.close();
+	        }
+	      },
 	    });
 	  }
 
@@ -828,9 +838,48 @@ export class ToolExecutor {
       else if (lnClass.is_test === false && solClass.is_test === false) envKind = 'mainnet';
       else if (lnClass.is_test !== null || solClass.is_test !== null) envKind = 'mixed';
 
-      const receiptsDb = String(this.receipts?.dbPath || '').trim() || '';
+      const receiptsDbRaw = String(this.receipts?.dbPath || '').trim() || '';
+      const receiptsDb = receiptsDbRaw ? (path.isAbsolute(receiptsDbRaw) ? receiptsDbRaw : path.resolve(process.cwd(), receiptsDbRaw)) : '';
       const peerKeypair = String(this.peer?.keypairPath || '').trim() || '';
       const peerKeypairExists = peerKeypair ? fs.existsSync(peerKeypair) : false;
+
+      const receiptsSources = [];
+      const seenDb = new Set();
+      if (receiptsDb) {
+        receiptsSources.push({
+          key: 'default',
+          label: 'default (setup.json)',
+          db: receiptsDb,
+          exists: fs.existsSync(receiptsDb),
+        });
+        seenDb.add(receiptsDb);
+      }
+      try {
+        const receiptsRoot = path.resolve(process.cwd(), 'onchain', 'receipts');
+        const rfqBotsRoot = path.join(receiptsRoot, 'rfq-bots');
+        if (fs.existsSync(rfqBotsRoot) && fs.statSync(rfqBotsRoot).isDirectory()) {
+          for (const ent of fs.readdirSync(rfqBotsRoot, { withFileTypes: true })) {
+            if (!ent.isDirectory()) continue;
+            const store = ent.name;
+            const dir = path.join(rfqBotsRoot, store);
+            try {
+              for (const f of fs.readdirSync(dir, { withFileTypes: true })) {
+                if (!f.isFile()) continue;
+                if (!f.name.endsWith('.sqlite')) continue;
+                const db = path.join(dir, f.name);
+                if (seenDb.has(db)) continue;
+                receiptsSources.push({
+                  key: `rfq-bots:${store}:${f.name}`,
+                  label: `rfq-bots/${store}/${f.name}`,
+                  db,
+                  exists: true,
+                });
+                seenDb.add(db);
+              }
+            } catch (_e) {}
+          }
+        }
+      } catch (_e) {}
 
       return {
         type: 'env',
@@ -845,7 +894,7 @@ export class ToolExecutor {
         },
         app: { app_tag: INTERCOMSWAP_APP_TAG, app_hash: appHash },
         sc_bridge: { url: String(this.scBridge?.url || '').trim() || null, token_configured: Boolean(this.scBridge?.token) },
-        receipts: { db: receiptsDb || null },
+        receipts: { db: receiptsDb || null, sources: receiptsSources },
       };
     }
 
@@ -4240,7 +4289,25 @@ export class ToolExecutor {
       toolName === 'intercomswap_swaprecover_refund'
     ) {
       const { TradeReceiptsStore } = await import('../receipts/store.js');
-      const dbPath = String(this.receipts?.dbPath || '').trim();
+      const defaultDbPath = String(this.receipts?.dbPath || '').trim();
+      const dbOverrideArg = expectOptionalString(args, toolName, 'db', { min: 1, max: 400 });
+      let dbPath = defaultDbPath;
+      if (dbOverrideArg) {
+        const resolved = resolveOnchainPath(dbOverrideArg, { label: 'db' });
+        const receiptsRoot = path.resolve(process.cwd(), 'onchain', 'receipts');
+        const rel = path.relative(receiptsRoot, resolved);
+        const within = rel && !rel.startsWith('..') && !path.isAbsolute(rel);
+        if (!within) {
+          throw new Error(`db must be under onchain/receipts (got ${resolved})`);
+        }
+        if (!resolved.endsWith('.sqlite')) {
+          throw new Error('db must end with .sqlite');
+        }
+        if (!fs.existsSync(resolved)) {
+          throw new Error(`db does not exist: ${resolved}`);
+        }
+        dbPath = resolved;
+      }
       if (!dbPath) throw new Error('receipts db not configured (set receipts.db in prompt setup JSON)');
       const store = TradeReceiptsStore.open({ dbPath });
       try {
@@ -4260,21 +4327,21 @@ export class ToolExecutor {
       };
 
       if (toolName === 'intercomswap_receipts_list') {
-        assertAllowedKeys(args, toolName, ['limit', 'offset']);
+        assertAllowedKeys(args, toolName, ['db', 'limit', 'offset']);
         const limit = expectOptionalInt(args, toolName, 'limit', { min: 1, max: 1000 }) ?? 50;
         const offset = expectOptionalInt(args, toolName, 'offset', { min: 0, max: 1_000_000 }) ?? 0;
         return store.listTradesPaged({ limit, offset });
       }
 
       if (toolName === 'intercomswap_receipts_list_open_claims') {
-        assertAllowedKeys(args, toolName, ['limit', 'offset']);
+        assertAllowedKeys(args, toolName, ['db', 'limit', 'offset']);
         const limit = expectOptionalInt(args, toolName, 'limit', { min: 1, max: 1000 }) ?? 50;
         const offset = expectOptionalInt(args, toolName, 'offset', { min: 0, max: 1_000_000 }) ?? 0;
         return store.listOpenClaims({ limit, offset, state: 'ln_paid' });
       }
 
       if (toolName === 'intercomswap_receipts_list_open_refunds') {
-        assertAllowedKeys(args, toolName, ['now_unix', 'limit', 'offset']);
+        assertAllowedKeys(args, toolName, ['db', 'now_unix', 'limit', 'offset']);
         const nowUnix = expectOptionalInt(args, toolName, 'now_unix', { min: 1 }) ?? null;
         const limit = expectOptionalInt(args, toolName, 'limit', { min: 1, max: 1000 }) ?? 50;
         const offset = expectOptionalInt(args, toolName, 'offset', { min: 0, max: 1_000_000 }) ?? 0;
@@ -4282,13 +4349,13 @@ export class ToolExecutor {
       }
 
       if (toolName === 'intercomswap_receipts_show') {
-        assertAllowedKeys(args, toolName, ['trade_id']);
+        assertAllowedKeys(args, toolName, ['db', 'trade_id']);
         const tradeId = expectString(args, toolName, 'trade_id', { min: 1, max: 128 });
         return store.getTrade(tradeId);
       }
 
       if (toolName === 'intercomswap_swaprecover_claim') {
-        assertAllowedKeys(args, toolName, ['trade_id', 'payment_hash_hex', 'cu_limit', 'cu_price']);
+        assertAllowedKeys(args, toolName, ['db', 'trade_id', 'payment_hash_hex', 'cu_limit', 'cu_price']);
         requireApproval(toolName, autoApprove);
         const tradeId = expectOptionalString(args, toolName, 'trade_id', { min: 1, max: 128 });
         const paymentHashHex = expectOptionalString(args, toolName, 'payment_hash_hex', { min: 64, max: 64, pattern: /^[0-9a-fA-F]{64}$/ });
@@ -4345,7 +4412,7 @@ export class ToolExecutor {
       }
 
       if (toolName === 'intercomswap_swaprecover_refund') {
-        assertAllowedKeys(args, toolName, ['trade_id', 'payment_hash_hex', 'cu_limit', 'cu_price']);
+        assertAllowedKeys(args, toolName, ['db', 'trade_id', 'payment_hash_hex', 'cu_limit', 'cu_price']);
         requireApproval(toolName, autoApprove);
         const tradeId = expectOptionalString(args, toolName, 'trade_id', { min: 1, max: 128 });
         const paymentHashHex = expectOptionalString(args, toolName, 'payment_hash_hex', { min: 64, max: 64, pattern: /^[0-9a-fA-F]{64}$/ });

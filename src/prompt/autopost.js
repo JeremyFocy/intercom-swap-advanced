@@ -23,10 +23,11 @@ function safeCloneArgs(args) {
 // Intentionally *not* a general job runner: it only supports a small allowlist
 // of tools and strictly controlled argument shaping.
 export class AutopostManager {
-  constructor({ runTool, getTrade = null }) {
+  constructor({ runTool, getTrade = null, listTrades = null }) {
     if (typeof runTool !== 'function') throw new Error('AutopostManager: runTool function required');
     this.runTool = runTool;
     this.getTrade = typeof getTrade === 'function' ? getTrade : null;
+    this.listTrades = typeof listTrades === 'function' ? listTrades : null;
     this.jobs = new Map(); // name -> job
   }
 
@@ -88,6 +89,7 @@ export class AutopostManager {
       validUntilUnix,
       args: baseArgs,
       tradeId: t === 'intercomswap_rfq_post' && typeof baseArgs?.trade_id === 'string' ? String(baseArgs.trade_id).trim() : null,
+      peerSignerHex: null,
       runs: 0,
       startedAt: Date.now(),
       lastRunAt: null,
@@ -112,6 +114,55 @@ export class AutopostManager {
         // Stop the job when it is no longer valid (do not repost/extend indefinitely).
         stopJob('expired');
         return { type: 'autopost_stopped', name: job.name, ok: true, reason: 'expired' };
+      }
+
+      // For Offer bots: prune filled offer lines so we don't keep advertising inventory that already traded.
+      // This relies on local receipts (claimed trades) and is best-effort.
+      if (job.tool === 'intercomswap_offer_post' && job.peerSignerHex && this.listTrades) {
+        try {
+          const offers = Array.isArray(job.args?.offers) ? job.args.offers : [];
+          if (offers.length > 0) {
+            const trades = await this.listTrades({ limit: 250 });
+            const removeCounts = new Map(); // key -> count
+            const startMs = Number(job.startedAt || 0);
+            for (const tr of Array.isArray(trades) ? trades : []) {
+              if (!isObject(tr)) continue;
+              if (String(tr.state || '').trim() !== 'claimed') continue;
+              const maker = String(tr.maker_peer || '').trim().toLowerCase();
+              if (!maker || maker !== job.peerSignerHex) continue;
+              const updatedAt = typeof tr.updated_at === 'number' ? tr.updated_at : null;
+              if (startMs && typeof updatedAt === 'number' && updatedAt > 0 && updatedAt < startMs) continue;
+              const btcSats = Number(tr.btc_sats);
+              const usdtAmount = String(tr.usdt_amount || '').trim();
+              if (!Number.isInteger(btcSats) || btcSats < 1) continue;
+              if (!/^[0-9]+$/.test(usdtAmount)) continue;
+              const key = `${btcSats}:${usdtAmount}`;
+              removeCounts.set(key, (removeCounts.get(key) || 0) + 1);
+            }
+            if (removeCounts.size > 0) {
+              const nextOffers = [];
+              for (const o of offers) {
+                if (!isObject(o)) continue;
+                const btcSats = Number(o.btc_sats);
+                const usdtAmount = String(o.usdt_amount || '').trim();
+                const key = `${btcSats}:${usdtAmount}`;
+                const n = removeCounts.get(key) || 0;
+                if (n > 0) {
+                  removeCounts.set(key, n - 1);
+                  continue; // drop filled line
+                }
+                nextOffers.push(o);
+              }
+              job.args.offers = nextOffers;
+            }
+            if (Array.isArray(job.args?.offers) && job.args.offers.length === 0) {
+              stopJob('filled');
+              return { type: 'autopost_stopped', name: job.name, ok: true, reason: 'filled' };
+            }
+          }
+        } catch (_e) {
+          // ignore
+        }
       }
 
       // For RFQ bots: once the trade is in-progress (or finished), stop reposting so the operator
@@ -143,6 +194,13 @@ export class AutopostManager {
         job.runs += 1;
         job.lastOk = true;
         job.lastError = null;
+        if (job.tool === 'intercomswap_offer_post' && !job.peerSignerHex) {
+          try {
+            const signer = res && typeof res === 'object' ? res?.envelope?.signer : null;
+            const hex = typeof signer === 'string' ? signer.trim().toLowerCase() : '';
+            if (hex) job.peerSignerHex = hex;
+          } catch (_e) {}
+        }
         return res;
       } catch (err) {
         job.runs += 1;

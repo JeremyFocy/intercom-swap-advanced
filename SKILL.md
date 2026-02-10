@@ -314,6 +314,8 @@ Example promptd configs (all under `onchain/` so they are gitignored):
 
 Collin shows an **ENV** indicator (TEST/MAINNET/MIXED) from `intercomswap_env_get` and displays the active `receipts.db` path so you can sanity-check before moving funds.
 
+Collin also lets you select which receipts DB to inspect in `Trade Actions` / `Refunds` (for example, the default `receipts.db` vs RFQ bot receipts under `onchain/receipts/rfq-bots/...`).
+
 ### OpenClaw Control (Minimal)
 OpenClaw (https://openclaw.ai/) can operate this stack autonomously as long as it can:
 - run local deterministic scripts, or
@@ -1183,6 +1185,10 @@ Lightning channel note:
 - LN channels are **not opened per trade**. Open channels ahead of time and reuse them for many swaps.
 - A direct channel is only between 2 LN nodes, but you can usually pay many different counterparties via routing across the LN network (if a route exists).
 - Collin will block RFQ/Offer/Bot tools until at least one LN channel exists (to prevent “can’t settle” operator footguns).
+
+Autopost (Collin "Run as bot") safety:
+- RFQ autopost jobs stop automatically once their `trade_id` progresses beyond the RFQ phase (prevents multiple counterparties racing the same RFQ).
+- Offer autopost jobs prune filled offer lines (claimed trades matching maker peer + amounts) and stop once all lines are filled or the offer expires.
 
 Lightning network flag reminder:
 - CLN mainnet is `--ln-network bitcoin`
