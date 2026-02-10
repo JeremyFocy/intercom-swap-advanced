@@ -2026,13 +2026,13 @@ function App() {
                   className="input"
                   value={scFilter.channel}
                   onChange={(e) => setScFilter((p) => ({ ...p, channel: e.target.value }))}
-                  placeholder="filter channel"
+                  placeholder="filter channel (contains)"
                 />
                 <input
                   className="input"
                   value={scFilter.kind}
                   onChange={(e) => setScFilter((p) => ({ ...p, kind: e.target.value }))}
-                  placeholder="filter kind"
+                  placeholder="filter kind (contains)"
                 />
               </div>
               <VirtualList
