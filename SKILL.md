@@ -263,6 +263,10 @@ Edit `onchain/prompt/setup.json`:
 - `sc_bridge.token` or `sc_bridge.token_file`: SC‑Bridge auth
 - `ln.wallet_password_file`: recommended explicit LND unlock password file path under `onchain/` (example: `onchain/lnd/mainnet/maker/wallet.pw`)
 - optional: `receipts.db`, `ln.*`, `solana.*` (only needed for tools that touch those subsystems)
+- trade automation bootstrap (optional):
+  - `server.tradeauto_autostart` (default `true`) keeps backend trade automation running after promptd restarts.
+  - `server.tradeauto_channels` (default `["0000intercomswapbtcusdt","0000intercom"]`).
+  - `server.tradeauto_trace_enabled` (default `false`), `server.tradeauto_autostart_retry_ms` (default `5000`), `server.tradeauto_autostart_max_attempts` (default `24`).
 
 LN backend decision gate (mandatory in every setup.json):
 - Never rely on LN defaults in production-like runs. Defaults are CLN/CLI/regtest and can cause misleading readiness failures.

@@ -734,6 +734,11 @@ Edit `onchain/prompt/setup.json`:
 - `sc_bridge.token` or `sc_bridge.token_file`
 - `receipts.db` (optional, for `intercomswap_receipts_*` tools)
 - `ln.*`, `solana.*` (optional, depending on which tools you want enabled)
+- trade automation bootstrap (optional, defaults shown):
+  - `server.tradeauto_autostart` (default `true`): auto-start backend trade worker after promptd restart.
+  - `server.tradeauto_channels` (default `["0000intercomswapbtcusdt","0000intercom"]`).
+  - `server.tradeauto_trace_enabled` (default `false`).
+  - `server.tradeauto_autostart_retry_ms` (default `5000`), `server.tradeauto_autostart_max_attempts` (default `24`).
 
 Start the service:
 ```bash

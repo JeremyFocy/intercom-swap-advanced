@@ -188,7 +188,11 @@ export async function lnListFunds(opts) {
     const wallet = await lnLndCli({ ...opts, args: ['walletbalance'] });
     const channel = await lnLndCli({ ...opts, args: ['channelbalance'] });
     const channels = await lnLndCli({ ...opts, args: ['listchannels'] });
-    return { wallet, channel, channels };
+    let pending = null;
+    try {
+      pending = await lnLndCli({ ...opts, args: ['pendingchannels'] });
+    } catch (_e) {}
+    return { wallet, channel, channels, pending };
   }
   return lnClnCli({ ...opts, args: ['listfunds'] });
 }

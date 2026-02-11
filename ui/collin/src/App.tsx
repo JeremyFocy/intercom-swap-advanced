@@ -239,6 +239,11 @@ function isSwapTradeChannelName(raw: any): boolean {
   return ch.startsWith('swap:');
 }
 
+function isPendingLnChannelState(raw: any): boolean {
+  const s = String(raw || '').trim().toLowerCase();
+  return s.includes('pending');
+}
+
 function normalizeChannels(
   input: any,
   opts: { max?: number; dropSwapTradeChannels?: boolean } = {}
@@ -3071,6 +3076,8 @@ function App() {
         capacity_sats: number | null;
         local_sats: number | null;
         remote_sats: number | null;
+        funding_txid: string;
+        channel_point: string;
       }> = [];
 
       const clnChannels = Array.isArray((listchannels as any)?.channels)
@@ -3099,6 +3106,42 @@ function App() {
             capacity_sats: toSafe(cap),
             local_sats: toSafe(local),
             remote_sats: toSafe(remote),
+            funding_txid: (() => {
+              const cp = String((ch as any)?.channel_point || '').trim();
+              const m = cp.match(/^([0-9a-f]{64}):\d+$/i);
+              if (m) return String(m[1] || '').toLowerCase();
+              return '';
+            })(),
+            channel_point: String((ch as any)?.channel_point || '').trim(),
+          });
+        }
+        const pendingRaw = (listfunds as any)?.pending;
+        const pendingOpen = Array.isArray((pendingRaw as any)?.pending_open_channels)
+          ? (pendingRaw as any).pending_open_channels
+          : [];
+        for (const p of pendingOpen) {
+          const chan = (p as any)?.channel && typeof (p as any).channel === 'object' ? (p as any).channel : {};
+          const cp = String((chan as any)?.channel_point || '').trim();
+          const cap = parseSats((chan as any)?.capacity);
+          const local = parseSats((chan as any)?.local_balance);
+          const remote = parseSats((chan as any)?.remote_balance);
+          const txid = (() => {
+            const m = cp.match(/^([0-9a-f]{64}):\d+$/i);
+            return m ? String(m[1] || '').toLowerCase() : '';
+          })();
+          const id = cp || txid || `pending:${String((chan as any)?.remote_node_pub || '').trim().toLowerCase()}`;
+          rows.push({
+            id,
+            chan_id: '',
+            peer: String((chan as any)?.remote_node_pub || '').trim().toLowerCase(),
+            state: 'pending_open',
+            active: false,
+            private: Boolean((chan as any)?.private),
+            capacity_sats: toSafe(cap),
+            local_sats: toSafe(local),
+            remote_sats: toSafe(remote),
+            funding_txid: txid,
+            channel_point: cp,
           });
         }
       } else {
@@ -3126,6 +3169,8 @@ function App() {
             capacity_sats: toSafe(capMsat / 1000n),
             local_sats: toSafe(localMsat / 1000n),
             remote_sats: toSafe(remoteMsat / 1000n),
+            funding_txid: fundingTxid,
+            channel_point: idFromFunding,
           });
         }
       }
@@ -4231,7 +4276,7 @@ function App() {
   }, [lnChannelRows]);
   const lnVisibleChannelRows = useMemo(() => {
     if (lnShowInactiveChannels) return lnChannelRows;
-    return lnChannelRows.filter((ch: any) => Boolean(ch?.active));
+    return lnChannelRows.filter((ch: any) => Boolean(ch?.active) || isPendingLnChannelState((ch as any)?.state));
   }, [lnChannelRows, lnShowInactiveChannels]);
   const lnMaxOutboundSats = typeof preflight?.ln_summary?.max_outbound_sats === 'number' ? preflight.ln_summary.max_outbound_sats : null;
   const lnTotalOutboundSats = typeof preflight?.ln_summary?.total_outbound_sats === 'number' ? preflight.ln_summary.total_outbound_sats : null;
@@ -7055,20 +7100,26 @@ function App() {
                         const peer = String(ch?.peer || '').trim();
                         const state = String(ch?.state || '').trim() || '?';
                         const active = Boolean(ch?.active);
+                        const pending = isPendingLnChannelState(state);
+                        const statusLabel = active ? 'active' : pending ? 'pending' : 'inactive';
                         const isPrivate = Boolean(ch?.private);
                         const cap = typeof ch?.capacity_sats === 'number' ? ch.capacity_sats : null;
                         const local = typeof ch?.local_sats === 'number' ? ch.local_sats : null;
                         const remote = typeof ch?.remote_sats === 'number' ? ch.remote_sats : null;
+                        const fundingTxid = String(ch?.funding_txid || '').trim().toLowerCase();
+                        const channelPoint = String(ch?.channel_point || '').trim();
                         return (
                           <div className="rowitem" style={{ marginTop: 8 }}>
                             <div className="rowitem-top">
-                              <span className={`chip ${active ? 'hi' : 'warn'}`}>{active ? 'active' : 'inactive'}</span>
+                              <span className={`chip ${active ? 'hi' : 'warn'}`}>{statusLabel}</span>
                               <span className="chip">{isPrivate ? 'private' : 'public'}</span>
                               <span className="mono dim">{state}</span>
                             </div>
                             <div className="rowitem-mid">
                               <span className="mono">peer: {peer || '—'}</span>
                               <span className="mono">id: {id || '—'}</span>
+                              <span className="mono">channel_point: {channelPoint || '—'}</span>
+                              <span className="mono">funding tx: {fundingTxid || '—'}</span>
                               <span className="mono">
                                 capacity: {cap !== null ? `${satsToBtcDisplay(cap)} BTC (${cap} sats)` : '—'}
                               </span>
@@ -7091,7 +7142,7 @@ function App() {
                                     setLnSpliceChannelId(id);
                                     pushToast('info', `Selected channel ${id.slice(0, 16)}… for splice.`);
                                   }}
-                                  disabled={!id}
+                                  disabled={!id || pending}
                                 >
                                   Use for splice
                                 </button>
@@ -7115,9 +7166,15 @@ function App() {
                               <button className="btn small" onClick={() => copyToClipboard('channel id', id)} disabled={!id}>
                                 Copy ID
                               </button>
+                              <button className="btn small" onClick={() => copyToClipboard('channel point', channelPoint)} disabled={!channelPoint}>
+                                Copy point
+                              </button>
+                              <button className="btn small" onClick={() => copyToClipboard('funding txid', fundingTxid)} disabled={!fundingTxid}>
+                                Copy txid
+                              </button>
                               <button
                                 className="btn small danger"
-                                disabled={!id}
+                                disabled={!id || pending}
                                 onClick={async () => {
                                   const sat_per_vbyte = Number(lnChannelCloseSatPerVbyte || 0);
                                   const ok =
