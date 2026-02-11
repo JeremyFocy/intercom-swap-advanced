@@ -1472,7 +1472,7 @@ function App() {
 
     const invitePolicyWarning =
       okChecklist && invitePolicy.missingTrustedInviters
-        ? 'swap invites require trusted inviter keys; currently none configured (join tool auto-learns from signed invites)'
+        ? 'No trusted inviter keys are preloaded yet. First valid signed swap-invite join will auto-learn and persist the inviter key.'
         : null;
 
     return {
@@ -3694,12 +3694,20 @@ function App() {
           <div className="grid2">
             <Panel title="Getting Started">
               {!stackGate.ok ? (
-                <div className="alert warn">
-                  Use <b>START</b> in the header. It bootstraps the full local stack: peer + sidechannels + Lightning + Solana + receipts.
+                <div className="alert">
+                  {!stackAnyRunning ? (
+                    <>
+                      <b>Setup required.</b> Click <b>START</b> in the header to bootstrap peer + sidechannels + Lightning + Solana + receipts.
+                    </>
+                  ) : (
+                    <>
+                      <b>Stack is running.</b> Complete the remaining checklist items below to enable trading.
+                    </>
+                  )}
                 </div>
               ) : null}
               {stackGate.invitePolicyWarning ? (
-                <div className="alert warn">
+                <div className="alert">
                   <b>Invite Policy:</b> {stackGate.invitePolicyWarning}
                 </div>
               ) : null}
@@ -3720,8 +3728,8 @@ function App() {
               ) : null}
 
 	              {!stackGate.ok ? (
-	                <div className="alert bad">
-	                  <b>STACK BLOCKED.</b> Trading tools are disabled until everything is green:
+	                <div className="alert warn">
+	                  <b>Trading setup incomplete.</b> Complete these items to enable trading:
 	                  <div className="muted small" style={{ marginTop: 6, whiteSpace: 'pre-wrap' }}>
 	                    {stackGate.reasons.length > 0 ? stackGate.reasons.map((r) => `- ${r}`).join('\n') : '- unknown'}
 	                  </div>
@@ -4040,8 +4048,8 @@ function App() {
           <div className="grid2">
             <Panel title="New Offer (Sell USDT)">
               {!stackGate.ok ? (
-                <div className="alert bad">
-                  <b>STACK BLOCKED.</b> Offers/RFQs are disabled until everything is green.
+                <div className="alert warn">
+                  <b>Offer setup incomplete.</b> Complete these checklist items to enable posting:
                   <div className="muted small" style={{ marginTop: 6, whiteSpace: 'pre-wrap' }}>
                     {stackGate.reasons.length > 0 ? stackGate.reasons.map((r) => `- ${r}`).join('\n') : '- unknown'}
                   </div>
@@ -4490,8 +4498,8 @@ function App() {
           <div className="grid2">
             <Panel title="New RFQ (Sell BTC)">
               {!stackGate.ok ? (
-                <div className="alert bad">
-                  <b>STACK BLOCKED.</b> Offers/RFQs are disabled until everything is green.
+                <div className="alert warn">
+                  <b>RFQ setup incomplete.</b> Complete these checklist items to enable posting:
                   <div className="muted small" style={{ marginTop: 6, whiteSpace: 'pre-wrap' }}>
                     {stackGate.reasons.length > 0 ? stackGate.reasons.map((r) => `- ${r}`).join('\n') : '- unknown'}
                   </div>
@@ -5374,7 +5382,7 @@ function App() {
 	                        void recoverClaimForTrade(selected?.trade);
 	                      }}
 	                      aria-disabled={!stackGate.ok}
-	                      title={!stackGate.ok ? 'Blocked until stack is ready (click for details)' : 'Claim (if available)'}
+	                      title={!stackGate.ok ? 'Complete setup checklist first (see Overview)' : 'Claim (if available)'}
 	                    >
 	                      Claim
 	                    </button>
@@ -5384,7 +5392,7 @@ function App() {
 	                        void recoverRefundForTrade(selected?.trade);
 	                      }}
 	                      aria-disabled={!stackGate.ok}
-	                      title={!stackGate.ok ? 'Blocked until stack is ready (click for details)' : 'Refund (if available)'}
+	                      title={!stackGate.ok ? 'Complete setup checklist first (see Overview)' : 'Refund (if available)'}
 	                    >
 	                      Refund
 	                    </button>
@@ -6567,7 +6575,7 @@ function App() {
                   onClick={onRun}
                   disabled={runBusy || !stackGate.ok}
                   title={
-                    !stackGate.ok ? `Blocked until stack is ready:\n${stackGate.reasons.map((r) => `- ${r}`).join('\n')}` : ''
+                    !stackGate.ok ? `Complete setup checklist first:\n${stackGate.reasons.map((r) => `- ${r}`).join('\n')}` : ''
                   }
                 >
                   {runBusy ? 'Running…' : 'Run'}

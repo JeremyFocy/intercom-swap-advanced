@@ -359,6 +359,11 @@
 .select {
   min-width: 0;
   width: 100%;
+  color-scheme: dark;
+}
+.select option {
+  background: var(--surface2);
+  color: var(--fg);
 }
 /* Only grow horizontally inside flex-row containers */
 .row > .input,
