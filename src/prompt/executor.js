@@ -1382,8 +1382,24 @@ export class ToolExecutor {
       if (!peerStore) {
         try {
           const kp = String(this.peer?.keypairPath || '').trim();
-          const m = kp.match(/[\\/]+stores[\\/]+([^\\/]+)[\\/]+db[\\/]+keypair\\.json$/i);
-          const inferred = m ? String(m[1] || '').trim() : '';
+          const normParts = kp
+            .replace(/\\/g, '/')
+            .split('/')
+            .map((s) => String(s || '').trim())
+            .filter(Boolean);
+          let inferred = '';
+          const storesIdx = normParts.findIndex((p) => p.toLowerCase() === 'stores');
+          if (storesIdx >= 0 && storesIdx + 1 < normParts.length) {
+            const candidate = String(normParts[storesIdx + 1] || '').trim();
+            const hasDb = String(normParts[storesIdx + 2] || '').toLowerCase() === 'db';
+            const hasKeypair = String(normParts[normParts.length - 1] || '').toLowerCase() === 'keypair.json';
+            if (candidate && hasDb && hasKeypair) inferred = candidate;
+          }
+          if (!inferred) {
+            // Legacy regex fallback (absolute or relative).
+            const m = kp.match(/(?:^|[\\/])stores[\\/]+([^\\/]+)[\\/]+db[\\/]+keypair\\.json$/i);
+            inferred = m ? String(m[1] || '').trim() : '';
+          }
           if (inferred && /^[A-Za-z0-9._-]+$/.test(inferred)) {
             peerStore = inferred;
             peerStoreSource = 'peer_keypair';
@@ -1560,8 +1576,35 @@ export class ToolExecutor {
           return false;
         }
       };
+      const lnListFundsWithRetry = async () => {
+        const isDocker = String(this.ln?.backend || '').trim() === 'docker';
+        const attempts = isDocker ? 20 : 1;
+        let lastErr = null;
+        for (let i = 0; i < attempts; i += 1) {
+          try {
+            return await lnListFunds(this.ln);
+          } catch (err) {
+            lastErr = err;
+            const msg = String(err?.message ?? err ?? '').toLowerCase();
+            const transient =
+              isDocker &&
+              (
+                msg.includes('service "') && msg.includes(' is not running') ||
+                msg.includes('waiting to start') ||
+                msg.includes('rpc services not available') ||
+                msg.includes('connection refused') ||
+                msg.includes('transport is closing') ||
+                msg.includes('timed out') ||
+                msg.includes('deadline exceeded')
+              );
+            if (!transient || i === attempts - 1) throw err;
+            await new Promise((r) => setTimeout(r, 1000));
+          }
+        }
+        throw lastErr || new Error('ln listfunds failed');
+      };
       try {
-        const funds = await lnListFunds(this.ln);
+        const funds = await lnListFundsWithRetry();
         const channels = Array.isArray(funds?.channels) ? funds.channels : Array.isArray(funds?.channels?.channels) ? funds.channels.channels : [];
         const channelCount = Array.isArray(channels) ? channels.length : 0;
         if (lnBootstrap && String(this.ln?.backend || '').trim() === 'docker' && String(this.ln?.network || '').trim().toLowerCase() === 'regtest') {
@@ -1590,8 +1633,43 @@ export class ToolExecutor {
           const looksLocked = lowered.includes('wallet is locked') || lowered.includes('wallet locked') || lowered.includes('unlock');
           if (looksLocked) {
             try {
-              await this.execute('intercomswap_ln_unlock', {}, { autoApprove: true, dryRun: false, secrets });
-              const funds2 = await lnListFunds(this.ln);
+              const isTransientRpcStart = (v) => {
+                const s = String(v || '').toLowerCase();
+                return (
+                  s.includes('in the process of starting up') ||
+                  s.includes('not yet ready to accept calls') ||
+                  s.includes('waiting to start') ||
+                  s.includes('rpc services not available') ||
+                  s.includes('connection refused') ||
+                  s.includes('transport is closing') ||
+                  s.includes('deadline exceeded') ||
+                  s.includes('timed out')
+                );
+              };
+
+              let unlocked = false;
+              let lastUnlockErr = null;
+              for (let i = 0; i < 25; i += 1) {
+                try {
+                  await this.execute('intercomswap_ln_unlock', {}, { autoApprove: true, dryRun: false, secrets });
+                  unlocked = true;
+                  break;
+                } catch (unlockErr) {
+                  lastUnlockErr = unlockErr;
+                  const umsg = String(unlockErr?.message ?? unlockErr ?? '').toLowerCase();
+                  if (umsg.includes('already unlocked') || umsg.includes('wallet is already unlocked')) {
+                    unlocked = true;
+                    break;
+                  }
+                  if (!isTransientRpcStart(umsg) || i === 24) {
+                    throw unlockErr;
+                  }
+                  await new Promise((r) => setTimeout(r, 1000));
+                }
+              }
+              if (!unlocked && lastUnlockErr) throw lastUnlockErr;
+
+              const funds2 = await lnListFundsWithRetry();
               const channels2 = Array.isArray(funds2?.channels)
                 ? funds2.channels
                 : Array.isArray(funds2?.channels?.channels)

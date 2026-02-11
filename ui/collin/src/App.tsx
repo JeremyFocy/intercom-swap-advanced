@@ -6588,13 +6588,17 @@ function App() {
 	                            runBusy ||
                             lnWalletLocked ||
 	                            !lnRebalanceSupported ||
-	                            lnChannelCount < 1 ||
+	                            !lnRebalanceMinChannelsOk ||
 	                            !Number.isInteger(lnRebalanceAmountSats) ||
 	                            Number(lnRebalanceAmountSats) <= 0
 	                          }
 	                          onClick={async () => {
                             if (lnWalletLocked) {
                               pushToast('error', 'Lightning wallet locked. Unlock it first, then refresh BTC status.');
+                              return;
+                            }
+                            if (!lnRebalanceMinChannelsOk) {
+                              pushToast('error', 'Rebalance requires at least 2 active channels to form a return route.');
                               return;
                             }
 	                            const amount_sats = Number(lnRebalanceAmountSats || 0);
