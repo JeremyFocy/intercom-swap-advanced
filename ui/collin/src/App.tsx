@@ -1255,13 +1255,121 @@ function App() {
   }, [scEvents, scChannels, preflight?.sc_stats]);
   const knownChannelsForInputs = useMemo(() => knownChannels.slice(0, 500), [knownChannels]);
 
+  const swapTradeContexts = useMemo(() => {
+    const byTrade = new Map<string, any>();
+    for (let i = scEvents.length - 1; i >= 0; i -= 1) {
+      const e: any = scEvents[i];
+      const kind = String(e?.kind || e?.message?.kind || '').trim();
+      if (!kind.startsWith('swap.')) continue;
+      const channel = String(e?.channel || '').trim();
+      if (!channel.startsWith('swap:')) continue;
+      const msg = e?.message && typeof e.message === 'object' ? e.message : null;
+      const tradeId = String(e?.trade_id || msg?.trade_id || '').trim();
+      if (!tradeId) continue;
+      let ctx = byTrade.get(tradeId);
+      if (!ctx) {
+        ctx = {
+          trade_id: tradeId,
+          channel,
+          last_ts: 0,
+          terms: null,
+          accept: null,
+          invoice: null,
+          escrow: null,
+          ln_paid: null,
+          claimed: null,
+          refunded: null,
+          canceled: null,
+        };
+        byTrade.set(tradeId, ctx);
+      }
+      if (channel) ctx.channel = channel;
+      const ts = typeof e?.ts === 'number' ? e.ts : 0;
+      if (ts > Number(ctx.last_ts || 0)) ctx.last_ts = ts;
+      if (kind === 'swap.terms') ctx.terms = msg;
+      else if (kind === 'swap.accept') ctx.accept = msg;
+      else if (kind === 'swap.ln_invoice') ctx.invoice = msg;
+      else if (kind === 'swap.sol_escrow_created') ctx.escrow = msg;
+      else if (kind === 'swap.ln_paid') ctx.ln_paid = msg;
+      else if (kind === 'swap.sol_claimed') ctx.claimed = msg;
+      else if (kind === 'swap.sol_refunded') ctx.refunded = msg;
+      else if (kind === 'swap.cancel') ctx.canceled = msg;
+    }
+    const out = Array.from(byTrade.values());
+    out.sort((a, b) => Number(b?.last_ts || 0) - Number(a?.last_ts || 0));
+    return out;
+  }, [scEvents]);
+
+  const swapNegotiationByTrade = useMemo(() => {
+    const byTrade = new Map<string, any>();
+    for (let i = scEvents.length - 1; i >= 0; i -= 1) {
+      const e: any = scEvents[i];
+      const kind = String(e?.kind || e?.message?.kind || '').trim();
+      if (!kind.startsWith('swap.')) continue;
+      const msg = e?.message && typeof e.message === 'object' ? e.message : null;
+      const tradeId = String(e?.trade_id || msg?.trade_id || '').trim();
+      if (!tradeId) continue;
+      let ctx = byTrade.get(tradeId);
+      if (!ctx) {
+        ctx = {
+          trade_id: tradeId,
+          rfq: null,
+          quote: null,
+          quote_accept: null,
+          swap_invite: null,
+          swap_channel: '',
+        };
+        byTrade.set(tradeId, ctx);
+      }
+      if (kind === 'swap.rfq' && !ctx.rfq) ctx.rfq = msg;
+      else if (kind === 'swap.quote' && !ctx.quote) ctx.quote = msg;
+      else if (kind === 'swap.quote_accept' && !ctx.quote_accept) ctx.quote_accept = msg;
+      else if (kind === 'swap.swap_invite') {
+        if (!ctx.swap_invite) ctx.swap_invite = msg;
+        const ch = String(msg?.body?.swap_channel || '').trim();
+        if (ch) ctx.swap_channel = ch;
+      }
+    }
+    return byTrade;
+  }, [scEvents]);
+
   const autoAcceptedQuoteSigRef = useRef<Set<string>>(new Set());
   const autoAcceptedTradeIdRef = useRef<Set<string>>(new Set());
   const autoRfqFromOfferLineRef = useRef<Set<string>>(new Set());
   const autoQuotedRfqSigRef = useRef<Set<string>>(new Set());
   const autoInvitedAcceptSigRef = useRef<Set<string>>(new Set());
   const autoJoinedInviteSigRef = useRef<Set<string>>(new Set());
+  const autoSwapStageDoneRef = useRef<Set<string>>(new Set());
+  const autoSwapStageInFlightRef = useRef<Set<string>>(new Set());
+  const autoSwapStageRetryRef = useRef<Map<string, number>>(new Map());
+  const autoSwapPreimageByTradeRef = useRef<Map<string, string>>(new Map());
   const autoAcceptLockedWarnedRef = useRef(false);
+
+  function canRunAutoSwapStage(stageKey: string) {
+    if (!stageKey) return false;
+    if (autoSwapStageDoneRef.current.has(stageKey)) return false;
+    if (autoSwapStageInFlightRef.current.has(stageKey)) return false;
+    const retryAfter = autoSwapStageRetryRef.current.get(stageKey) || 0;
+    return Date.now() >= retryAfter;
+  }
+
+  function markAutoSwapStageInFlight(stageKey: string) {
+    if (!stageKey) return;
+    autoSwapStageInFlightRef.current.add(stageKey);
+  }
+
+  function markAutoSwapStageSuccess(stageKey: string) {
+    if (!stageKey) return;
+    autoSwapStageInFlightRef.current.delete(stageKey);
+    autoSwapStageRetryRef.current.delete(stageKey);
+    autoSwapStageDoneRef.current.add(stageKey);
+  }
+
+  function markAutoSwapStageRetry(stageKey: string, cooldownMs = 15_000) {
+    if (!stageKey) return;
+    autoSwapStageInFlightRef.current.delete(stageKey);
+    autoSwapStageRetryRef.current.set(stageKey, Date.now() + Math.max(1000, Math.trunc(cooldownMs)));
+  }
 
   const lnWalletLocked = useMemo(() => {
     const errs = [
@@ -1745,6 +1853,321 @@ function App() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [health?.ok, autoJoinSwapInvites, inviteEvents, joinedChannelsSet, watchedChannelsSet]);
+
+  useEffect(() => {
+    if (!health?.ok) return;
+    if (lnWalletLocked) return;
+    if (!autoAcceptQuotes || !autoInviteFromAccepts || !autoJoinSwapInvites) return;
+    const localPeer = String(localPeerPubkeyHex || '').trim().toLowerCase();
+    if (!/^[0-9a-f]{64}$/i.test(localPeer)) return;
+
+    const envelopeSigner = (env: any) => {
+      try {
+        const s = String(env?.signer || '').trim().toLowerCase();
+        return /^[0-9a-f]{64}$/i.test(s) ? s : '';
+      } catch (_e) {
+        return '';
+      }
+    };
+
+    const intOrNull = (v: any) => {
+      if (v === null || v === undefined) return null;
+      const n = typeof v === 'number' ? v : Number.parseInt(String(v).trim(), 10);
+      if (!Number.isFinite(n)) return null;
+      return Math.trunc(n);
+    };
+
+    const clampRefundWindowSec = (raw: any) => {
+      const n = intOrNull(raw);
+      if (n === null) return 72 * 3600;
+      return Math.max(3600, Math.min(7 * 24 * 3600, n));
+    };
+
+    const parseContentJson = (out: any) => {
+      const cj = out?.content_json;
+      if (cj && typeof cj === 'object') return cj;
+      if (typeof out?.content === 'string') {
+        try {
+          const j = JSON.parse(out.content);
+          return j && typeof j === 'object' ? j : null;
+        } catch (_e) {}
+      }
+      return null;
+    };
+
+    let cancelled = false;
+    void (async () => {
+      const queue = [...swapTradeContexts].reverse();
+      for (const tradeCtx of queue) {
+        if (cancelled) return;
+        try {
+          const tradeId = String(tradeCtx?.trade_id || '').trim();
+          if (!tradeId) continue;
+          if (tradeCtx?.claimed || tradeCtx?.refunded || tradeCtx?.canceled) continue;
+
+          const neg = swapNegotiationByTrade.get(tradeId) || {};
+          const rfqEnv = neg?.rfq && typeof neg.rfq === 'object' ? neg.rfq : null;
+          const quoteEnv = neg?.quote && typeof neg.quote === 'object' ? neg.quote : null;
+          const quoteAcceptEnv = neg?.quote_accept && typeof neg.quote_accept === 'object' ? neg.quote_accept : null;
+
+          const termsEnv = tradeCtx?.terms && typeof tradeCtx.terms === 'object' ? tradeCtx.terms : null;
+          const acceptEnv = tradeCtx?.accept && typeof tradeCtx.accept === 'object' ? tradeCtx.accept : null;
+          const invoiceEnv = tradeCtx?.invoice && typeof tradeCtx.invoice === 'object' ? tradeCtx.invoice : null;
+          const escrowEnv = tradeCtx?.escrow && typeof tradeCtx.escrow === 'object' ? tradeCtx.escrow : null;
+          const lnPaidEnv = tradeCtx?.ln_paid && typeof tradeCtx.ln_paid === 'object' ? tradeCtx.ln_paid : null;
+
+          const makerSigner = envelopeSigner(termsEnv) || envelopeSigner(quoteEnv);
+          const takerSigner = envelopeSigner(acceptEnv) || envelopeSigner(quoteAcceptEnv) || envelopeSigner(rfqEnv);
+          const iAmMaker = makerSigner ? makerSigner === localPeer : false;
+          const iAmTaker = takerSigner ? takerSigner === localPeer : false;
+          if (!iAmMaker && !iAmTaker) continue;
+
+          const swapChannel = String(tradeCtx?.channel || neg?.swap_channel || `swap:${tradeId}`).trim();
+          if (!swapChannel.startsWith('swap:')) continue;
+
+          // Stage 1 (maker): publish terms from quote + RFQ + quote_accept.
+          if (iAmMaker && !termsEnv && quoteEnv && rfqEnv && quoteAcceptEnv) {
+            const stageKey = `${tradeId}:terms_post`;
+            if (canRunAutoSwapStage(stageKey)) {
+              markAutoSwapStageInFlight(stageKey);
+              try {
+                const quoteBody = quoteEnv?.body && typeof quoteEnv.body === 'object' ? quoteEnv.body : {};
+                const rfqBody = rfqEnv?.body && typeof rfqEnv.body === 'object' ? rfqEnv.body : {};
+                const btcSats = intOrNull(quoteBody?.btc_sats ?? rfqBody?.btc_sats);
+                const usdtAmount = String(quoteBody?.usdt_amount ?? rfqBody?.usdt_amount ?? '').trim();
+                const solRecipient = String(rfqBody?.sol_recipient || '').trim();
+                const solRefund = String((preflight as any)?.sol_signer?.pubkey || '').trim();
+                const tradeFeeCollector = String(quoteBody?.trade_fee_collector || '').trim();
+                const lnPayerPeer = envelopeSigner(quoteAcceptEnv) || envelopeSigner(rfqEnv);
+                const solMint = String(walletUsdtMint || '').trim();
+                if (btcSats === null || btcSats < 1) throw new Error('auto terms_post: missing btc_sats');
+                if (!/^[0-9]+$/.test(usdtAmount)) throw new Error('auto terms_post: missing usdt_amount');
+                if (!solMint) throw new Error('auto terms_post: missing USDT mint');
+                if (!solRecipient) throw new Error('auto terms_post: missing sol_recipient');
+                if (!solRefund) throw new Error('auto terms_post: missing sol_refund');
+                if (!tradeFeeCollector) throw new Error('auto terms_post: missing trade_fee_collector');
+                if (!lnPayerPeer) throw new Error('auto terms_post: missing ln_payer_peer');
+                const refundAfterUnix = Math.floor(Date.now() / 1000) + clampRefundWindowSec(quoteBody?.sol_refund_window_sec);
+                const termsValidUntilUnix = intOrNull(quoteBody?.valid_until_unix);
+
+                await runToolFinal(
+                  'intercomswap_terms_post',
+                  {
+                    channel: swapChannel,
+                    trade_id: tradeId,
+                    btc_sats: btcSats,
+                    usdt_amount: usdtAmount,
+                    sol_mint: solMint,
+                    sol_recipient: solRecipient,
+                    sol_refund: solRefund,
+                    sol_refund_after_unix: refundAfterUnix,
+                    ln_receiver_peer: localPeer,
+                    ln_payer_peer: lnPayerPeer,
+                    trade_fee_collector: tradeFeeCollector,
+                    ...(termsValidUntilUnix && termsValidUntilUnix > 0 ? { terms_valid_until_unix: termsValidUntilUnix } : {}),
+                  },
+                  { auto_approve: true }
+                );
+                markAutoSwapStageSuccess(stageKey);
+                pushToast('success', `Auto terms posted (${tradeId.slice(0, 10)}…)`);
+              } catch (err: any) {
+                markAutoSwapStageRetry(stageKey, 10_000);
+              }
+            }
+            continue;
+          }
+
+          // Stage 2 (taker): accept terms.
+          if (iAmTaker && termsEnv && !acceptEnv) {
+            const stageKey = `${tradeId}:terms_accept`;
+            if (canRunAutoSwapStage(stageKey)) {
+              markAutoSwapStageInFlight(stageKey);
+              try {
+                await runToolFinal(
+                  'intercomswap_terms_accept_from_terms',
+                  { channel: swapChannel, terms_envelope: termsEnv },
+                  { auto_approve: true }
+                );
+                markAutoSwapStageSuccess(stageKey);
+                pushToast('success', `Auto terms-accept posted (${tradeId.slice(0, 10)}…)`);
+              } catch (err: any) {
+                markAutoSwapStageRetry(stageKey, 10_000);
+              }
+            }
+            continue;
+          }
+
+          // Stage 3 (maker): create and post LN invoice after terms acceptance.
+          if (iAmMaker && termsEnv && acceptEnv && !invoiceEnv) {
+            const stageKey = `${tradeId}:ln_invoice`;
+            if (canRunAutoSwapStage(stageKey)) {
+              markAutoSwapStageInFlight(stageKey);
+              try {
+                const termsBody = termsEnv?.body && typeof termsEnv.body === 'object' ? termsEnv.body : {};
+                const btcSats = intOrNull(termsBody?.btc_sats);
+                if (btcSats === null || btcSats < 1) throw new Error('auto ln_invoice: missing btc_sats');
+                const label = `swap-${tradeId}-${Date.now()}`.slice(0, 120);
+                const description = `intercomswap ${tradeId}`.slice(0, 500);
+                await runToolFinal(
+                  'intercomswap_swap_ln_invoice_create_and_post',
+                  {
+                    channel: swapChannel,
+                    trade_id: tradeId,
+                    btc_sats: btcSats,
+                    label,
+                    description,
+                  },
+                  { auto_approve: true }
+                );
+                markAutoSwapStageSuccess(stageKey);
+                pushToast('success', `Auto LN invoice posted (${tradeId.slice(0, 10)}…)`);
+              } catch (err: any) {
+                markAutoSwapStageRetry(stageKey, 10_000);
+              }
+            }
+            continue;
+          }
+
+          // Stage 4 (maker): create and post Solana escrow after invoice.
+          if (iAmMaker && termsEnv && invoiceEnv && !escrowEnv) {
+            const stageKey = `${tradeId}:sol_escrow`;
+            if (canRunAutoSwapStage(stageKey)) {
+              markAutoSwapStageInFlight(stageKey);
+              try {
+                const termsBody = termsEnv?.body && typeof termsEnv.body === 'object' ? termsEnv.body : {};
+                const invBody = invoiceEnv?.body && typeof invoiceEnv.body === 'object' ? invoiceEnv.body : {};
+                const paymentHashHex = String(invBody?.payment_hash_hex || '').trim().toLowerCase();
+                const mint = String(termsBody?.sol_mint || walletUsdtMint || '').trim();
+                const amount = String(termsBody?.usdt_amount || '').trim();
+                const recipient = String(termsBody?.sol_recipient || '').trim();
+                const refund = String(termsBody?.sol_refund || '').trim();
+                const refundAfterUnix = intOrNull(termsBody?.sol_refund_after_unix);
+                const tradeFeeCollector = String(termsBody?.trade_fee_collector || '').trim();
+                if (!/^[0-9a-f]{64}$/i.test(paymentHashHex)) throw new Error('auto sol_escrow: missing payment_hash_hex');
+                if (!mint) throw new Error('auto sol_escrow: missing mint');
+                if (!/^[0-9]+$/.test(amount)) throw new Error('auto sol_escrow: missing amount');
+                if (!recipient) throw new Error('auto sol_escrow: missing recipient');
+                if (!refund) throw new Error('auto sol_escrow: missing refund');
+                if (refundAfterUnix === null || refundAfterUnix < 1) throw new Error('auto sol_escrow: missing refund_after_unix');
+                if (!tradeFeeCollector) throw new Error('auto sol_escrow: missing trade_fee_collector');
+                await runToolFinal(
+                  'intercomswap_swap_sol_escrow_init_and_post',
+                  {
+                    channel: swapChannel,
+                    trade_id: tradeId,
+                    payment_hash_hex: paymentHashHex,
+                    mint,
+                    amount,
+                    recipient,
+                    refund,
+                    refund_after_unix: refundAfterUnix,
+                    trade_fee_collector: tradeFeeCollector,
+                    ...(solCuLimit > 0 ? { cu_limit: solCuLimit } : {}),
+                    ...(solCuPrice > 0 ? { cu_price: solCuPrice } : {}),
+                  },
+                  { auto_approve: true }
+                );
+                markAutoSwapStageSuccess(stageKey);
+                pushToast('success', `Auto escrow posted (${tradeId.slice(0, 10)}…)`);
+              } catch (err: any) {
+                markAutoSwapStageRetry(stageKey, 10_000);
+              }
+            }
+            continue;
+          }
+
+          // Stage 5 (taker): verified LN pay + publish ln_paid.
+          if (iAmTaker && termsEnv && invoiceEnv && escrowEnv && !lnPaidEnv) {
+            const stageKey = `${tradeId}:ln_pay`;
+            if (canRunAutoSwapStage(stageKey)) {
+              markAutoSwapStageInFlight(stageKey);
+              try {
+                const out = await runToolFinal(
+                  'intercomswap_swap_ln_pay_and_post_verified',
+                  {
+                    channel: swapChannel,
+                    terms_envelope: termsEnv,
+                    invoice_envelope: invoiceEnv,
+                    escrow_envelope: escrowEnv,
+                  },
+                  { auto_approve: true }
+                );
+                const cj = parseContentJson(out);
+                const preimageHex = String((cj as any)?.preimage_hex || '').trim().toLowerCase();
+                if (/^[0-9a-f]{64}$/i.test(preimageHex)) {
+                  autoSwapPreimageByTradeRef.current.set(tradeId, preimageHex);
+                }
+                markAutoSwapStageSuccess(stageKey);
+                pushToast('success', `Auto LN pay posted (${tradeId.slice(0, 10)}…)`);
+              } catch (err: any) {
+                markAutoSwapStageRetry(stageKey, 10_000);
+              }
+            }
+            continue;
+          }
+
+          // Stage 6 (taker): claim Solana escrow.
+          if (iAmTaker && termsEnv && lnPaidEnv && !tradeCtx?.claimed) {
+            const stageKey = `${tradeId}:sol_claim`;
+            if (canRunAutoSwapStage(stageKey)) {
+              markAutoSwapStageInFlight(stageKey);
+              try {
+                const termsBody = termsEnv?.body && typeof termsEnv.body === 'object' ? termsEnv.body : {};
+                const mint = String(termsBody?.sol_mint || walletUsdtMint || '').trim();
+                if (!mint) throw new Error('auto sol_claim: missing mint');
+
+                let preimageHex = String(autoSwapPreimageByTradeRef.current.get(tradeId) || '').trim().toLowerCase();
+                if (!/^[0-9a-f]{64}$/i.test(preimageHex)) {
+                  const t = await runDirectToolOnce(
+                    'intercomswap_receipts_show',
+                    { ...receiptsDbArg, trade_id: tradeId },
+                    { auto_approve: false }
+                  );
+                  preimageHex = String((t as any)?.ln_preimage_hex || '').trim().toLowerCase();
+                  if (/^[0-9a-f]{64}$/i.test(preimageHex)) autoSwapPreimageByTradeRef.current.set(tradeId, preimageHex);
+                }
+                if (!/^[0-9a-f]{64}$/i.test(preimageHex)) throw new Error('auto sol_claim: missing LN preimage');
+
+                await runToolFinal(
+                  'intercomswap_swap_sol_claim_and_post',
+                  {
+                    channel: swapChannel,
+                    trade_id: tradeId,
+                    preimage_hex: preimageHex,
+                    mint,
+                  },
+                  { auto_approve: true }
+                );
+                markAutoSwapStageSuccess(stageKey);
+                pushToast('success', `Auto claim posted (${tradeId.slice(0, 10)}…)`);
+              } catch (err: any) {
+                markAutoSwapStageRetry(stageKey, 15_000);
+              }
+            }
+            continue;
+          }
+        } catch (_e) {}
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    health?.ok,
+    lnWalletLocked,
+    autoAcceptQuotes,
+    autoInviteFromAccepts,
+    autoJoinSwapInvites,
+    localPeerPubkeyHex,
+    swapTradeContexts,
+    swapNegotiationByTrade,
+    walletUsdtMint,
+    preflight?.sol_signer?.pubkey,
+    solCuLimit,
+    solCuPrice,
+    receiptsDbArg.db,
+  ]);
 
   function dismissInviteTrade(tradeIdRaw: string) {
     const tradeId = String(tradeIdRaw || '').trim();
@@ -2519,6 +2942,14 @@ function App() {
   async function stopAutopostJob(nameRaw: string) {
     const name = String(nameRaw || '').trim();
     if (!name) return;
+    try {
+      const jobs = Array.isArray((preflight as any)?.autopost?.jobs) ? (preflight as any).autopost.jobs : [];
+      const exists = jobs.some((j: any) => String(j?.name || '').trim() === name);
+      if (!exists) {
+        pushToast('info', `Bot already stopped or missing (${name})`);
+        return;
+      }
+    } catch (_e) {}
     try {
       if (toolRequiresApproval('intercomswap_autopost_stop') && !autoApprove) {
         const ok = window.confirm(`Stop bot?\n\n${name}`);
