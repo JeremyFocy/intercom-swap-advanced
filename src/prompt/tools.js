@@ -785,7 +785,7 @@ export const INTERCOMSWAP_TOOLS = [
   ),
   tool(
     'intercomswap_ln_unlock',
-    'LND-only: unlock the wallet (docker backend). Uses a password file under onchain/ (gitignored).',
+    'LND-only: unlock the wallet (docker backend). Uses ln.wallet_password_file from prompt setup, or an inferred file under onchain/lnd/<network>/ (gitignored).',
     {
       type: 'object',
       additionalProperties: false,
@@ -796,7 +796,7 @@ export const INTERCOMSWAP_TOOLS = [
           maxLength: 400,
           pattern: '^[^\\s]+$',
           description:
-            'Path to a file containing the LND wallet password. Must be under onchain/. If omitted, promptd will try to infer it from ln.service (maker/taker).',
+            'Path to a file containing the LND wallet password. Must be under onchain/. If omitted, promptd uses ln.wallet_password_file then falls back to inferred names under onchain/lnd/<network>/ (e.g. maker.wallet-password.txt, taker.wallet-password.txt, wallet.pw).',
         },
         timeout_ms: { type: 'integer', minimum: 1000, maximum: 120000, description: 'Optional timeout (default 30000).' },
       },

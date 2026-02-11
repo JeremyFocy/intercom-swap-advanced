@@ -703,6 +703,64 @@ function normalizeDockerServiceName(value, label = 'service') {
   return s;
 }
 
+function discoverLnWalletPasswordFile({ network, service, role }) {
+  const net = String(network || '').trim();
+  if (!net) return '';
+  const baseDir = path.resolve(process.cwd(), 'onchain', 'lnd', net);
+  if (!fs.existsSync(baseDir)) return '';
+  try {
+    const st = fs.statSync(baseDir);
+    if (!st.isDirectory()) return '';
+  } catch (_e) {
+    return '';
+  }
+
+  const svc = String(service || '').trim();
+  const roleTag = String(role || '').trim().toLowerCase();
+  const candidates = [];
+  const add = (name) => {
+    const n = String(name || '').trim();
+    if (!n) return;
+    candidates.push(path.join(baseDir, n));
+  };
+
+  if (roleTag) {
+    add(`${roleTag}.wallet-password.txt`);
+    add(`${roleTag}.wallet-password`);
+    add(`${roleTag}.wallet.pw`);
+    add(`${roleTag}.pw`);
+    add(`${roleTag}.password.txt`);
+    add(`${roleTag}.password`);
+  }
+
+  if (svc) {
+    add(`${svc}.wallet-password.txt`);
+    add(`${svc}.wallet-password`);
+    add(`${svc}.wallet.pw`);
+    add(`${svc}.pw`);
+  }
+
+  add('wallet-password.txt');
+  add('wallet-password');
+  add('wallet.password.txt');
+  add('wallet.password');
+  add('wallet.pw');
+  add('wallet.pass');
+  add('wallet.txt');
+
+  for (const p of candidates) {
+    try {
+      if (!fs.existsSync(p)) continue;
+      const st = fs.statSync(p);
+      if (!st.isFile()) continue;
+      const data = String(fs.readFileSync(p, 'utf8') || '').trim();
+      if (!data) continue;
+      return p;
+    } catch (_e) {}
+  }
+  return '';
+}
+
 async function dockerCompose({ composeFile, args, cwd }) {
   try {
     const { stdout, stderr } = await execFileP('docker', ['compose', '-f', composeFile, ...args], {
@@ -3831,21 +3889,44 @@ export class ToolExecutor {
 
       const timeoutMs = Number.isInteger(args.timeout_ms) ? Math.max(1000, Math.min(120_000, args.timeout_ms)) : 30_000;
 
+      // Fast path: if wallet is already unlocked, do not require a password file.
+      try {
+        await lnGetInfo(this.ln);
+        return {
+          type: 'ln_unlocked',
+          compose_file: composeFile,
+          service,
+          network: net,
+          already_unlocked: true,
+          stdout: null,
+          stderr: null,
+        };
+      } catch (_e) {}
+
       const passwordFileArg = expectOptionalString(args, toolName, 'password_file', { min: 1, max: 400, pattern: /^[^\s]+$/ });
       let passwordFile = passwordFileArg ? resolveOnchainPath(passwordFileArg, { label: 'password_file' }) : '';
       if (!passwordFile) {
-        const role = /maker/i.test(service) ? 'maker' : /taker/i.test(service) ? 'taker' : '';
-        if (role) {
-          passwordFile = resolveOnchainPath(path.join(process.cwd(), 'onchain', 'lnd', net, `${role}.wallet-password.txt`), {
-            label: 'password_file',
-          });
-        }
+        const cfgPath = String(this.ln?.walletPasswordFile || '').trim();
+        if (cfgPath) passwordFile = resolveOnchainPath(cfgPath, { label: 'password_file' });
       }
       if (!passwordFile) {
-        throw new Error(`${toolName}: password_file is required (could not infer from ln.service=${service})`);
+        const role = /maker/i.test(service) ? 'maker' : /taker/i.test(service) ? 'taker' : '';
+        const discovered = discoverLnWalletPasswordFile({ network: net, service, role });
+        if (discovered) passwordFile = resolveOnchainPath(discovered, { label: 'password_file' });
+      }
+      if (!passwordFile) {
+        throw new Error(
+          `${toolName}: password_file is required (could not infer for ln.service=${service}). ` +
+          `Set ln.wallet_password_file in prompt setup, or place one of maker.wallet-password.txt / taker.wallet-password.txt / wallet.pw under onchain/lnd/${net}/`
+        );
       }
 
-      const pw = String(fs.readFileSync(passwordFile, 'utf8') || '').trim();
+      let pw = '';
+      try {
+        pw = String(fs.readFileSync(passwordFile, 'utf8') || '').trim();
+      } catch (e) {
+        throw new Error(`${toolName}: failed to read password_file (${passwordFile}): ${e?.message || String(e)}`);
+      }
       if (!pw) throw new Error(`${toolName}: empty wallet password file`);
 
       if (dryRun) {

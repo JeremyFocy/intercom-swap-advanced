@@ -2088,7 +2088,7 @@ function App() {
     const ok =
       autoApprove ||
       window.confirm(
-        'Unlock Lightning wallet now?\n\nThis uses the configured password file under onchain/lnd/<network>/*.wallet-password.txt.'
+        'Unlock Lightning wallet now?\n\nThis uses ln.wallet_password_file from prompt setup, or inferred files under onchain/lnd/<network>/ (maker.wallet-password.txt / taker.wallet-password.txt / wallet.pw).'
       );
     if (!ok) return;
     try {

@@ -15,6 +15,11 @@ import { INTERCOMSWAP_TOOLS } from '../src/prompt/tools.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
+// Keep all relative onchain/path resolution anchored to repo root.
+// This avoids path drift when promptd is launched from another working directory.
+try {
+  process.chdir(repoRoot);
+} catch (_e) {}
 
 function die(msg) {
   process.stderr.write(`${msg}\n`);
@@ -258,6 +263,7 @@ async function main() {
             compose_file: 'dev/ln-regtest/docker-compose.yml',
             service: '',
             cli_bin: '',
+            wallet_password_file: '',
             lnd: { rpcserver: '', tlscert: '', macaroon: '', dir: '' },
           },
           solana: {

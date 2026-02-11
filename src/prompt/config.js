@@ -75,7 +75,7 @@ export const DEFAULT_PROMPT_SETUP_PATH = 'onchain/prompt/setup.json';
   //   "server": { "host": "127.0.0.1", "port": 9333, "audit_dir": "onchain/prompt/audit", "auto_approve_default": false },
   //   "sc_bridge": { "url": "ws://127.0.0.1:49222", "token": "...", "token_file": "onchain/sc-bridge/peer.token" },
   //   "receipts": { "db": "onchain/receipts/maker.sqlite" },
-  //   "ln": { ... },
+  //   "ln": { "wallet_password_file": "onchain/lnd/<network>/wallet.pw", ... },
   //   "solana": { ... }
   // }
   export function loadPromptSetupFromFile({ configPath = DEFAULT_PROMPT_SETUP_PATH, cwd = process.cwd() } = {}) {
@@ -163,6 +163,7 @@ export const DEFAULT_PROMPT_SETUP_PATH = 'onchain/prompt/setup.json';
     composeFile: resolvePath(baseDir, lnRaw.compose_file || path.join('dev', 'ln-regtest', 'docker-compose.yml')),
     service: normalizeString(lnRaw.service, { allowEmpty: true }) || '',
     cliBin: normalizeString(lnRaw.cli_bin, { allowEmpty: true }) || '',
+    walletPasswordFile: resolvePath(baseDir, lnRaw.wallet_password_file || ''),
     cwd: baseDir,
     lnd: {
       rpcserver: normalizeString(lnRaw?.lnd?.rpcserver, { allowEmpty: true }) || '',
