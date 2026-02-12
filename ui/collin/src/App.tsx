@@ -6789,7 +6789,7 @@ function App() {
                   );
                 })()}
 
-                <div className="gridform" style={{ marginTop: 8 }}>
+                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <div className="field">
                     <div className="field-hd">
                       <span className="mono">channel amount</span>
@@ -6809,39 +6809,41 @@ function App() {
                       Pushes initial balance to peer on open so your side gets immediate inbound capacity.
                     </div>
                   </div>
-                  <div className="field">
-                    <div className="field-hd">
-                      <span className="mono">open fee rate</span>
-                      <span className="muted small">sat/vB</span>
+                  <div className="gridform">
+                    <div className="field">
+                      <div className="field-hd">
+                        <span className="mono">open fee rate</span>
+                        <span className="muted small">sat/vB</span>
+                      </div>
+                      <input
+                        className="input mono"
+                        type="number"
+                        min={1}
+                        max={10000}
+                        value={String(lnChannelSatPerVbyte)}
+                        onChange={(e) => {
+                          const n = Number.parseInt(e.target.value, 10);
+                          if (Number.isFinite(n)) setLnChannelSatPerVbyte(Math.max(1, Math.min(10000, Math.trunc(n))));
+                        }}
+                      />
                     </div>
-                    <input
-                      className="input mono"
-                      type="number"
-                      min={1}
-                      max={10000}
-                      value={String(lnChannelSatPerVbyte)}
-                      onChange={(e) => {
-                        const n = Number.parseInt(e.target.value, 10);
-                        if (Number.isFinite(n)) setLnChannelSatPerVbyte(Math.max(1, Math.min(10000, Math.trunc(n))));
-                      }}
-                    />
-                  </div>
-                  <div className="field">
-                    <div className="field-hd">
-                      <span className="mono">close fee rate</span>
-                      <span className="muted small">sat/vB</span>
+                    <div className="field">
+                      <div className="field-hd">
+                        <span className="mono">close fee rate</span>
+                        <span className="muted small">sat/vB</span>
+                      </div>
+                      <input
+                        className="input mono"
+                        type="number"
+                        min={1}
+                        max={10000}
+                        value={String(lnChannelCloseSatPerVbyte)}
+                        onChange={(e) => {
+                          const n = Number.parseInt(e.target.value, 10);
+                          if (Number.isFinite(n)) setLnChannelCloseSatPerVbyte(Math.max(1, Math.min(10000, Math.trunc(n))));
+                        }}
+                      />
                     </div>
-                    <input
-                      className="input mono"
-                      type="number"
-                      min={1}
-                      max={10000}
-                      value={String(lnChannelCloseSatPerVbyte)}
-                      onChange={(e) => {
-                        const n = Number.parseInt(e.target.value, 10);
-                        if (Number.isFinite(n)) setLnChannelCloseSatPerVbyte(Math.max(1, Math.min(10000, Math.trunc(n))));
-                      }}
-                    />
                   </div>
                 </div>
 
