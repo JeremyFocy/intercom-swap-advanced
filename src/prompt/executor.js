@@ -481,6 +481,16 @@ function buildRfqListingLock(rfqId) {
   };
 }
 
+function buildRfqTradeListingLock(tradeId) {
+  const id = String(tradeId || '').trim();
+  if (!id) throw new Error('trade_id is required');
+  return {
+    listingKey: `rfq_trade:${id}`,
+    listingType: 'rfq_trade',
+    listingId: id,
+  };
+}
+
 function deriveStableOfferListingIdFromEnvelope(offerEnvelope, { toolName = 'tool' } = {}) {
   const env = isObject(offerEnvelope) ? offerEnvelope : {};
   const signerHex = String(env?.signer || '').trim().toLowerCase();
@@ -4037,14 +4047,16 @@ export class ToolExecutor {
         },
       });
       if (dryRun) return { type: 'dry_run', tool: toolName, channel, unsigned };
-      const rfqListing = buildRfqListingLock(rfqId);
+      // RFQs are reposted and their envelope hash changes on each repost (ts+nonce), so a lock keyed
+      // by rfq_id is not stable. Gate quote acceptance by trade_id to make it airtight across reposts.
+      const rfqTradeListing = buildRfqTradeListingLock(tradeId);
       const store = await this._openReceiptsStore({ required: false });
       let rfqLockCreated = false;
       try {
         if (store) {
           const existing = ensureListingLockAvailable({
             store,
-            listing: rfqListing,
+            listing: rfqTradeListing,
             tradeId,
             toolName,
             allowSameTradeInFlight: true,
@@ -4052,13 +4064,68 @@ export class ToolExecutor {
           const existingState = String(existing?.state || '').trim().toLowerCase();
           const existingTradeId = String(existing?.trade_id || '').trim();
           const sameTradeInFlight = existingState === 'in_flight' && existingTradeId === tradeId;
-          if (!sameTradeInFlight) {
+          if (sameTradeInFlight) {
+            // Only allow an idempotent replay for the same quote_id. Reject attempts to accept a
+            // different quote for the same trade_id while a prior accept is in-flight.
+            let existingQuoteId = '';
+            try {
+              const raw = String(existing?.meta_json || '').trim();
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                existingQuoteId = String(parsed?.quote_id || '').trim().toLowerCase();
+              }
+            } catch (_e) {
+              existingQuoteId = '';
+            }
+            const want = String(quoteId || '').trim().toLowerCase();
+            if (!existingQuoteId || existingQuoteId !== want) {
+              throw new Error(
+                `${toolName}: listing_in_progress (${rfqTradeListing.listingType}:${rfqTradeListing.listingId}` +
+                  `${existingQuoteId ? `, quote_id=${existingQuoteId}` : ''})`
+              );
+            }
+          } else {
+            // Backward-compat/extra safety: older versions locked RFQ acceptance by rfq_id
+            // (`rfq:<rfq_id>`). If such a lock exists for this trade_id (e.g., crash between
+            // lock-write and quote_accept post), respect it so we never accept two quotes.
+            const want = String(quoteId || '').trim().toLowerCase();
+            for (const row of store.listListingLocksByTrade(tradeId, { limit: 2000 })) {
+              const lt = String(row?.listing_type || '').trim().toLowerCase();
+              if (lt !== 'rfq' && lt !== 'rfq_trade') continue;
+              const st = String(row?.state || '').trim().toLowerCase();
+              if (st !== 'in_flight' && st !== 'filled') continue;
+              let lockedQuoteId = '';
+              try {
+                const raw = String(row?.meta_json || '').trim();
+                if (raw) {
+                  const parsed = JSON.parse(raw);
+                  lockedQuoteId = String(parsed?.quote_id || '').trim().toLowerCase();
+                }
+              } catch (_e) {
+                lockedQuoteId = '';
+              }
+              if (st === 'filled') {
+                throw new Error(
+                  `${toolName}: listing_filled (${rfqTradeListing.listingType}:${rfqTradeListing.listingId}` +
+                    `${lockedQuoteId ? `, quote_id=${lockedQuoteId}` : ''})`
+                );
+              }
+              // in_flight
+              if (!lockedQuoteId || lockedQuoteId !== want) {
+                throw new Error(
+                  `${toolName}: listing_in_progress (${rfqTradeListing.listingType}:${rfqTradeListing.listingId}` +
+                    `${lockedQuoteId ? `, quote_id=${lockedQuoteId}` : ''})`
+                );
+              }
+              break;
+            }
+
             upsertListingLockInFlight({
               store,
-              listing: rfqListing,
+              listing: rfqTradeListing,
               tradeId,
               note: 'quote_accept_posted',
-              meta: { quote_id: quoteId },
+              meta: { quote_id: quoteId, rfq_id: rfqId },
             });
             rfqLockCreated = true;
           }
@@ -4073,17 +4140,17 @@ export class ToolExecutor {
         if (store) {
           upsertListingLockInFlight({
             store,
-            listing: rfqListing,
+            listing: rfqTradeListing,
             tradeId,
             note: 'quote_accept_posted',
-            meta: { quote_id: quoteId },
+            meta: { quote_id: quoteId, rfq_id: rfqId },
           });
         }
         return result;
       } catch (err) {
         if (store && rfqLockCreated) {
           try {
-            store.deleteListingLock(rfqListing.listingKey);
+            store.deleteListingLock(rfqTradeListing.listingKey);
           } catch (_e) {}
         }
         throw err;
