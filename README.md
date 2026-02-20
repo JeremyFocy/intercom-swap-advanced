@@ -1,3 +1,123 @@
+# IntercomSwap Advanced Fork
+
+This repository is an advanced fork of IntercomSwap with additional tools, Web UI, and agent-interaction features.
+
+## Features
+
+- Real-time crypto price integration (CoinGecko API with fallback system)
+- Token swap simulator
+- Web UI swap interface
+- Command Line Interface (CLI)
+- Wallet balance viewer (simulation)
+- Swap history logging
+- Agent-compatible skill integration
+
+This project demonstrates a functional IntercomSwap-based application with extended capabilities for agent interaction and swap simulation.
+
+---
+
+## Installation
+
+Clone the repository:
+
+```bash
+git clone https://github.com/JeremyFocy/intercom-swap-advanced.git
+cd intercom-swap-advanced
+
+Install dependencies:
+
+npm install
+
+Running CLI Interface
+node cli.js
+
+
+Features available in CLI:
+
+Check token price
+
+Simulate swap
+
+View wallet balance
+
+View swap history
+
+Running Web Interface
+node server.js
+
+
+Open browser:
+
+http://localhost:3000
+
+
+Web features:
+
+Token swap simulator
+
+Real-time price calculation
+
+File Structure
+intercom-swap-advanced/
+│
+├ cli.js
+├ server.js
+├ price.js
+├ swap.js
+├ wallet.js
+├ history.js
+│
+├ web/
+│   ├ index.html
+│   └ app.js
+│
+├ swap-history.json
+├ proof/
+└ README.md
+
+Swap History
+
+All swaps are saved in:
+
+swap-history.json
+
+
+This allows agents and users to track previous transactions.
+
+Proof of Functionality
+
+Screenshots are available in:
+
+proof/ ![website](image.png)
+      
+proof/ ![cli](image-1.png)
+
+Including:
+
+CLI working
+
+Web UI working
+
+Swap simulation
+
+Agent Compatibility
+
+This fork adds extended capabilities for agent interaction including:
+
+swap simulation
+
+price lookup
+
+wallet viewing
+
+transaction tracking
+
+Trac Address
+
+trac1nd9qztuw29kltza7usvfl5y08nacz0hr0msvyvkhgn7vg4legsysrva45v
+
+---
+
 # Intercom Swap
 
 This repo is a fork of upstream **Intercom** (Trac-Systems/intercom): a reference implementation of the Intercom stack on Trac Network for an internet of agents.
