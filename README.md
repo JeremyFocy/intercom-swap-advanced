@@ -88,7 +88,7 @@ Proof of Functionality
 
 Screenshots are available in:
 
-proof/ ![website](image.png)
+proof/ ![web](image-2.png)
       
 proof/ ![cli](image-1.png)
 
