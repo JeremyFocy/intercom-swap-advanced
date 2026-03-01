@@ -1,23 +1,51 @@
-<html>
-
+<!DOCTYPE html>
+<html lang="en">
 <head>
-<title>IntercomSwap Web</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Intercom Swap Advanced</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 
 <body>
 
-<h2>Swap Simulator</h2>
+<div class="navbar">
+  <div class="logo">Intercom Swap Advanced</div>
+  <div class="live">● LIVE MARKET</div>
+</div>
 
-<input id="from" placeholder="From token">
-<input id="to" placeholder="To token">
-<input id="amount" placeholder="Amount">
+<div class="container">
 
-<button onclick="swap()">Swap</button>
+  <div class="card">
+    <h2>Market Price</h2>
 
-<p id="result"></p>
+    <select id="pairSelect">
+      <option value="BTCUSDT">BTC / USDT</option>
+      <option value="ETHUSDT">ETH / USDT</option>
+      <option value="SOLUSDT">SOL / USDT</option>
+      <option value="BNBUSDT">BNB / USDT</option>
+      <option value="XRPUSDT">XRP / USDT</option>
+      <option value="ADAUSDT">ADA / USDT</option>
+    </select>
+
+    <div class="price" id="price">Loading...</div>
+  </div>
+
+  <div class="card">
+    <h2>Swap Simulator</h2>
+
+    <input id="amount" type="number" placeholder="Amount" />
+
+    <button id="swapBtn">Simulate Swap</button>
+
+    <div class="result">
+      Estimated USDT:
+      <span id="result">-</span>
+    </div>
+  </div>
+
+</div>
 
 <script src="app.js"></script>
-
 </body>
-
 </html>

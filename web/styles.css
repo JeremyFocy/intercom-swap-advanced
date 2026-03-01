@@ -1,0 +1,82 @@
+body {
+  margin: 0;
+  font-family: Inter, sans-serif;
+  background: linear-gradient(135deg,#020617,#0f172a);
+  color: white;
+}
+
+.navbar {
+  display:flex;
+  justify-content:space-between;
+  padding:20px 40px;
+  background:rgba(255,255,255,0.05);
+}
+
+.logo {
+  font-weight:600;
+}
+
+.live {
+  color:#22c55e;
+}
+
+.container {
+  display:flex;
+  gap:30px;
+  padding:40px;
+  justify-content:center;
+}
+
+.card {
+  background:rgba(255,255,255,0.06);
+  padding:30px;
+  border-radius:16px;
+  width:300px;
+  backdrop-filter:blur(12px);
+}
+
+.price {
+  font-size:32px;
+  font-weight:bold;
+  margin:20px 0;
+}
+
+.pair {
+  opacity:.6;
+}
+
+input {
+  width:100%;
+  padding:12px;
+  border-radius:8px;
+  border:none;
+  margin-bottom:15px;
+}
+
+button {
+  width:100%;
+  padding:12px;
+  border:none;
+  border-radius:10px;
+  background:linear-gradient(90deg,#3b82f6,#9333ea);
+  color:white;
+  font-weight:bold;
+  cursor:pointer;
+}
+
+button:hover {
+  transform:scale(1.03);
+}
+
+.result {
+  margin-top:20px;
+  font-size:18px;
+}
+
+select {
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  border: none;
+  margin-bottom: 15px;
+}

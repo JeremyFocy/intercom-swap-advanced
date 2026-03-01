@@ -317,9 +317,107 @@ Peer runtime running
 
 Swap negotiation logs
 
+# Intercom Swap Advanced
+
+High-performance decentralized swap engine powered by TRAC peer runtime with real-time market data integration.
+
+---
+
+## 🚀 Features
+
+- ⚡ TRAC Peer Runtime (P2P Node)
+- 🔄 Advanced Swap Simulation Engine
+- 📡 Real Market Data (Binance Public API)
+- 🌐 Modern Web UI
+- 🧠 Modular Architecture
+- 🧩 Clean Separation (Runtime / Web / API)
+
+---
+
+## 🏗 Architecture
+
+
+intercom-swap-advanced/
+│
+├─ index.js # TRAC Peer Runtime (ESM)
+├─ web-server.cjs # Web Server (CommonJS)
+├─ package.json
+│
+└─ web/
+├─ index.html
+├─ styles.css
+└─ app.js
+
+
+### Runtime Layer
+- P2P communication
+- Price Oracle Feature
+- Swap execution logic
+
+### Web Layer
+- Live crypto prices
+- Multi pair selector (BTC, ETH, SOL, BNB, XRP, ADA)
+- Swap simulation UI
+
+---
+
+## 📦 Installation
+
+bash
+git clone https://github.com/JeremyFocy/intercom-swap-advanced.git
+cd intercom-swap-advanced
+npm install
+
+Install Express (for web UI):
+
+npm install express
+▶ Run Peer Runtime
+node index.js
+▶ Run Web UI
+node web-server.cjs
+
+Open:
+
+http://localhost:3000
+📡 Market Data Source
+
+Public price feed powered by:
+
+Binance API
+Endpoint:
+
+https://api.binance.com/api/v3/ticker/price
+
+No API key required.
+
+🧠 Design Principles
+
+Clean architecture
+
+Separation of concerns
+
+Runtime isolation
+
+Production-ready structure
+
+Zero modification of core peer logic
+
+🔮 Next Upgrade Ideas
+
+WebSocket real-time stream
+
+Orderbook depth
+
+Candlestick chart
+
+On-chain price oracle integration
+
+Swap execution via peer bridge
+
 My Address reward : trac1nd9qztuw29kltza7usvfl5y08nacz0hr0msvyvkhgn7vg4legsysrva45v
 
 ![proofwork](image-3.png)
+![proofSimulationSwap LiveMarket](image-4.png)
 
 Upstream Reference
 

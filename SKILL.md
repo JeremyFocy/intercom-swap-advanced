@@ -483,6 +483,90 @@ track transactions
 
 interact via CLI and Web
 
+```md
+# Intercom Swap Advanced Skill Definition
+
+## 🎯 Purpose
+
+A decentralized swap engine runtime with real-time market price integration and web-based simulation interface.
+
+---
+
+## 🧠 Core Capabilities
+
+### 1️⃣ Peer Runtime Engine
+- TRAC peer network communication
+- Modular feature loading
+- Secure message bus (MSB)
+
+### 2️⃣ Swap Simulation
+- Order validation
+- Expiration handling
+- In-memory order book
+- Deterministic execution
+
+### 3️⃣ Market Price Integration
+- Real-time Binance public API
+- Multi-asset support:
+  - BTC
+  - ETH
+  - SOL
+  - BNB
+  - XRP
+  - ADA
+
+### 4️⃣ Web Interface
+- Live market price
+- Pair selector
+- Swap simulator
+- Clean UI design
+
+---
+
+## ⚙ Technical Stack
+
+- Node.js (ESM for runtime)
+- CommonJS (Web Server)
+- Express.js
+- TRAC Peer
+- Binance REST API
+
+---
+
+## 🧩 Module Separation
+
+| Layer | Responsibility |
+|-------|---------------|
+| index.js | Peer runtime |
+| web-server.cjs | Static server |
+| web/ | UI frontend |
+
+---
+
+## 🔐 Security Model
+
+- No private key exposure
+- No API key required
+- Public price endpoint only
+- Runtime isolated from web UI
+
+---
+
+## 📈 Upgrade Path
+
+- WebSocket streaming price
+- Smart contract integration
+- On-chain oracle feed
+- Persistent order book
+- Multi-node clustering
+
+---
+
+## 🏁 Status
+
+Production-ready base architecture.
+Ready for scaling and feature extension.
+
 # Intercom Swap
 
 ## Description
