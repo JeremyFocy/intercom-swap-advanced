@@ -1,3 +1,363 @@
+
+Core Skills Categories 
+---
+1. Peer-to-Peer Networking
+
+Capabilities:
+
+Create Intercom peers
+
+Join sidechannels
+
+Manage peer identities
+
+Connect maker and taker nodes
+
+Maintain persistent peer state
+
+Agent can:
+
+Start peer nodes
+
+Stop peer nodes
+
+Monitor peer status
+
+Recover peer state
+
+Relevant tools:
+
+scripts/run-swap-maker.ps1
+scripts/run-swap-taker.ps1
+scripts/peermgr.ps1
+2. RFQ Negotiation Skill
+
+Capabilities:
+
+Send RFQ requests
+
+Receive RFQ requests
+
+Generate quotes
+
+Accept quotes
+
+Reject quotes
+
+Agent can:
+
+Initiate swap negotiation
+
+Automatically respond to RFQ
+
+Select best quote
+
+Relevant tools:
+
+scripts/rfq-maker-peer.ps1
+scripts/rfq-taker-peer.ps1
+
+Events:
+
+ready
+quote_created
+quote_accepted
+swap_joined
+3. Atomic Swap Execution Skill
+
+Capabilities:
+
+Execute Lightning ↔ Solana atomic swaps
+
+Create Lightning invoices
+
+Lock funds in Solana escrow
+
+Reveal preimage
+
+Claim escrow
+
+Refund expired swaps
+
+Agent can:
+
+Execute swaps autonomously
+
+Monitor swap progress
+
+Recover interrupted swaps
+
+Relevant tools:
+
+scripts/swapctl.ps1
+scripts/swaprecover.ps1
+4. Lightning Network Skill
+
+Capabilities:
+
+Create invoice
+
+Pay invoice
+
+Check node status
+
+Check balance
+
+Inspect channels
+
+Agent can:
+
+Receive BTC payments
+
+Send BTC payments
+
+Verify payment completion
+
+Relevant tools:
+
+scripts/lnctl.ps1
+5. Solana Blockchain Skill
+
+Capabilities:
+
+Generate keypair
+
+Check SOL balance
+
+Check token balance
+
+Transfer tokens
+
+Create escrow accounts
+
+Inspect escrow state
+
+Agent can:
+
+Lock funds in escrow
+
+Claim escrow
+
+Refund escrow
+
+Relevant tools:
+
+scripts/solctl.ps1
+6. Wallet Management Skill
+
+Capabilities:
+
+Create wallet
+
+Load wallet
+
+Inspect balances
+
+Track inventory
+
+Agent can:
+
+Manage trading inventory
+
+Track swap balances
+
+Relevant files:
+
+wallet.js
+7. Swap Lifecycle Management Skill
+
+Capabilities:
+
+Create swap
+
+Track swap state
+
+Monitor progress
+
+Recover interrupted swaps
+
+Complete swaps
+
+Swap states:
+
+created
+quoted
+accepted
+joined
+invoice_created
+escrow_locked
+payment_sent
+completed
+refunded
+
+Relevant tools:
+
+scripts/swaprecover.ps1
+8. Price Discovery Skill
+
+Capabilities:
+
+Fetch BTC price
+
+Calculate swap conversion rate
+
+Estimate swap outcome
+
+Agent can:
+
+Evaluate swap profitability
+
+Optimize trade execution
+
+Relevant files:
+
+price.js
+9. CLI Interaction Skill
+
+Capabilities:
+
+Interactive command interface
+
+Wallet inspection
+
+Swap simulation
+
+Price lookup
+
+Agent can:
+
+Execute CLI commands
+
+Automate CLI workflows
+
+Run:
+
+node cli.js
+10. Web Interface Skill
+
+Capabilities:
+
+User interaction
+
+Swap simulation
+
+Display price and balances
+
+Agent can:
+
+Interface with web backend
+
+Run:
+
+node server.js
+11. Recovery Skill
+
+Capabilities:
+
+Detect incomplete swaps
+
+Claim escrow
+
+Refund swaps
+
+Resume interrupted swaps
+
+Agent can:
+
+Automatically recover funds
+
+Prevent loss from interruptions
+
+Relevant tools:
+
+scripts/swaprecover.ps1
+12. SC-Bridge Control Skill
+
+Capabilities:
+
+Control peer remotely
+
+Send commands over bridge
+
+Inspect peer state
+
+Manage sidechannels
+
+Agent can:
+
+Control swap execution remotely
+
+Relevant tools:
+
+scripts/swapctl.ps1
+Autonomous Agent Capability Summary
+
+Agent can autonomously:
+
+Start peers
+
+Negotiate swaps
+
+Execute swaps
+
+Monitor swaps
+
+Recover swaps
+
+Manage wallets
+
+Interact with Lightning Network
+
+Interact with Solana blockchain
+
+Safety Guarantees
+
+System guarantees:
+
+Atomic swap safety
+
+No counterparty theft
+
+Refund protection
+
+Escrow protection
+
+Runtime Requirements
+
+Required:
+
+Node.js v20+
+
+Pear runtime
+
+Solana CLI
+
+Lightning node access
+
+Optional:
+
+Agent controller
+
+Web interface
+
+Skill Classification
+
+System type:
+
+Atomic Swap Execution Agent
+Cross-chain Settlement Agent
+P2P Trading Agent
+Lightning Network Agent
+Solana Blockchain Agent
+Skill Readiness Level
+Peer networking: READY
+RFQ negotiation: READY
+Atomic swap execution: READY
+Lightning integration: READY
+Solana integration: READY
+Recovery system: READY
+Agent automation: READY
+
 ---
 name: intercomswap
 description: "Install and operate Intercom Swap: a fork of Intercom that negotiates P2P RFQ swaps over sidechannels and settles BTC over Lightning to USDT on Solana via a shared escrow program, with deterministic operator tooling, recovery, and unattended end-to-end tests."

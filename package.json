@@ -1,6 +1,7 @@
 {
   "name": "contract-test-latest",
   "version": "0.0.1",
+  "type": "commonjs",
   "main": "index.js",
   "scripts": {
     "test": "node --test test/*.test.js",

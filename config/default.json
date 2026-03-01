@@ -1,0 +1,18 @@
+{
+  "peers": [
+    {
+      "name": "maker1",
+      "port": 7001,
+      "channel": "0000intercomswapbtcusdt"
+    }
+  ],
+  "rfq": {
+    "enabled": true
+  },
+  "server": {
+    "port": 3000
+  },
+  "network": {
+    "autoReconnect": true
+  }
+}
